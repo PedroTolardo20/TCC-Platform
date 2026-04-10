@@ -16,7 +16,7 @@ def generate_launch_description():
 
     # 2. Caminhos dos ficheiros (Garante que aponta para rav_nav2)
     xacro_file = PathJoinSubstitution(
-        [pkg_rav_description, "urdf", "platform_with_mesh_and_wheels.urdf.xacro"]
+        [pkg_rav_description, "urdf", "rav_complete.urdf.xacro"]
     )
 
     rviz_config = PathJoinSubstitution(
