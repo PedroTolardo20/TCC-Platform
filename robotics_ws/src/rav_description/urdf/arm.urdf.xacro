@@ -78,54 +78,9 @@
       <xacro:inertial_block mass="${0.001}" length="${0.001}" radius="${0.001}"/>
     </link>
 
-    <joint name="${prefix}joint_1_fixed" type="fixed">
+    <joint name="${prefix}joint_2" type="revolute">
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <parent link="${prefix}base_link"/>
-      <child link="${prefix}link_1"/>
-    </joint>
-
-    <link name="${prefix}link_1">
-      <xacro:inertial_block mass="${mass_2}" length="${length_2}" radius="${radius_2}"/>
-      <visual>
-        <origin xyz="0 0 ${length_2/2.0}" rpy="0 0 0"/>
-        <geometry><cylinder radius="${radius_2}" length="${length_2}"/></geometry>
-        <material name="Grey"/>
-      </visual>
-      <collision>
-        <origin xyz="0 0 ${length_2/2.0}" rpy="0 0 0"/>
-        <geometry><cylinder radius="${radius_2}" length="${length_2}"/></geometry>
-      </collision>
-    </link>
-    <xacro:gazebo_grey_link_color_block link_name="${prefix}link_1"/>
-
-    <link name="${prefix}link_1_endlink">
-      <xacro:inertial_block mass="${mass_2/3.0}" length="${2*radius_2+2*radius_3}" radius="${radius_2}"/>
-      <visual>
-        <origin xyz="0 0 ${(2*radius_2+2*radius_3)/2.0}" rpy="0 0 0"/>
-        <geometry><cylinder radius="${radius_2*1.1}" length="${2*radius_2+2*radius_3}"/></geometry>
-        <material name="LightBlue"/>
-      </visual>
-      <collision>
-        <origin xyz="0 0 ${(2*radius_2+2*radius_3)/2.0}" rpy="0 0 0"/>
-        <geometry><cylinder radius="${radius_2*1.1}" length="${2*radius_2+2*radius_3}"/></geometry>
-      </collision>
-    </link>
-    <xacro:gazebo_blue_link_color_block link_name="${prefix}link_1_endlink"/>
-
-    <joint name="${prefix}link_1_endjoint" type="fixed">
-      <origin xyz="${-radius_2} 0 ${length_2 - 0.01}" rpy="0 ${M_PI/2.0} 0"/>
-      <parent link="${prefix}link_1"/>
-      <child link="${prefix}link_1_endlink"/>
-    </joint>
-
-    <gazebo reference="${prefix}link_1_endjoint">
-      <disableFixedJointLumping>true</disableFixedJointLumping>
-      <preserveFixedJoint>true</preserveFixedJoint>
-    </gazebo>
-
-    <joint name="${prefix}joint_2" type="revolute">
-      <origin xyz="${radius_2 + radius_3} 0 ${length_2}" rpy="0 0 0"/>
-      <parent link="${prefix}link_1"/>
       <child link="${prefix}link_2"/>
       <axis xyz="1 0 0"/>
       <limit lower="0.0" upper="${M_PI * 2}" effort="300.0" velocity="1.0"/>

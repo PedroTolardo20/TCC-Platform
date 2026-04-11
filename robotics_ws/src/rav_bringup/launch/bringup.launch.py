@@ -82,6 +82,7 @@ def generate_launch_description():
         output='screen',
         condition=IfCondition(use_joint_state_publisher),
         parameters=[{
+            'robot_description': robot_description,
             'use_sim_time': use_sim_time
         }]
     )
@@ -112,7 +113,6 @@ def generate_launch_description():
         declare_use_platform_ctrl,
         declare_use_sim_time,
         declare_rviz_config,
-
         robot_state_publisher_node,
         joint_state_publisher_node,
         platform_ctrl_node,

@@ -3,16 +3,16 @@
 
   <xacro:include filename="$(find rav_description)/urdf/platform_with_mesh_and_wheels.urdf.xacro"/>
   <xacro:include filename="$(find rav_description)/urdf/rav_body.urdf.xacro"/>
-  <!-- <xacro:include filename="$(find rav_description)/urdf/arm.urdf.xacro"/> -->
+  <xacro:include filename="$(find rav_description)/urdf/arm.urdf.xacro"/>
 
   <xacro:rav_platform/>
   <xacro:rav_body parent_link="platform_base_link" xyz="0 0 0.2572" rpy="0 0 0"/>
 
   <!-- Braço montado sobre o corpo do robô -->
-  <!-- <xacro:arm
+  <xacro:arm
     parent_link="platform_base_link"
     prefix="arm_"
-    xyz="0 0 0.2572"
-    rpy="0 0 0"/> -->
+    xyz="0 1 0.69"
+    rpy="0 0 1.57"/>
 
 </robot>
