@@ -1,130 +1,122 @@
-import os
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription, SetEnvironmentVariable
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import Command, PathJoinSubstitution
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
-from launch_ros.descriptions import ParameterValue
-from launch_ros.substitutions import FindPackageShare
 from ament_index_python.packages import get_package_share_directory
+import os
+
 
 def generate_launch_description():
-    # 1. Referências dos pacotes
-    pkg_rav_description = FindPackageShare("rav_description")
-    pkg_rav_nav2 = FindPackageShare("rav_nav2")
-    nav2_bringup_dir = get_package_share_directory('nav2_bringup')
+    pkg_rav_nav2 = get_package_share_directory('rav_nav2')
+    pkg_nav2_bringup = get_package_share_directory('nav2_bringup')
 
-    # 2. Caminhos dos ficheiros (Garante que aponta para rav_nav2)
-    xacro_file = PathJoinSubstitution(
-        [pkg_rav_description, "urdf", "rav_complete.urdf.xacro"]
+    use_rviz = LaunchConfiguration('use_rviz')
+    use_sim_time = LaunchConfiguration('use_sim_time')
+    rviz_config = LaunchConfiguration('rviz_config')
+
+    map_file = os.path.join(
+        pkg_rav_nav2,
+        'maps',
+        'test_map.yaml'
     )
 
-    rviz_config = PathJoinSubstitution(
-        [pkg_rav_nav2, "rviz", "rav_nav.rviz"]
+    params_file = os.path.join(
+        pkg_rav_nav2,
+        'config',
+        'nav2_params.yaml'
     )
 
-    map_file = PathJoinSubstitution(
-        [pkg_rav_nav2, "maps", "test_map.yaml"]
+    default_rviz_config = os.path.join(
+        pkg_rav_nav2,
+        'rviz',
+        'nav2_config.rviz'
     )
 
-    nav2_params = PathJoinSubstitution(
-        [pkg_rav_nav2, "config", "nav2_params.yaml"]
+    nav2_bringup_launch = os.path.join(
+        pkg_nav2_bringup,
+        'launch',
+        'navigation_launch.py'
     )
 
-    robot_description_content = ParameterValue(
-        Command(["xacro", " ", xacro_file]),
-        value_type=str
+    declare_use_rviz = DeclareLaunchArgument(
+        'use_rviz',
+        default_value='false',
+        description='Abre o RViz da navegacao'
+    )
+
+    declare_use_sim_time = DeclareLaunchArgument(
+        'use_sim_time',
+        default_value='false',
+        description='Usa tempo de simulacao'
+    )
+
+    declare_rviz_config = DeclareLaunchArgument(
+        'rviz_config',
+        default_value=default_rviz_config,
+        description='Caminho do arquivo .rviz da navegacao'
+    )
+
+    static_map_to_odom = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        name='static_map_to_odom',
+        output='screen',
+        arguments=['0', '0', '0', '0', '0', '0', 'map', 'odom']
+    )
+
+    map_server_node = Node(
+        package='nav2_map_server',
+        executable='map_server',
+        name='map_server',
+        output='screen',
+        parameters=[
+            {'use_sim_time': use_sim_time},
+            {'yaml_filename': map_file}
+        ]
+    )
+
+    lifecycle_manager_node = Node(
+        package='nav2_lifecycle_manager',
+        executable='lifecycle_manager',
+        name='lifecycle_manager_localization',
+        output='screen',
+        parameters=[{
+            'use_sim_time': use_sim_time,
+            'autostart': True,
+            'node_names': ['map_server']
+        }]
+    )
+
+    nav2_navigation_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(nav2_bringup_launch),
+        launch_arguments={
+            'use_sim_time': use_sim_time,
+            'params_file': params_file
+        }.items()
+    )
+
+    rviz_node = Node(
+        package='rviz2',
+        executable='rviz2',
+        name='rviz2_nav',
+        output='screen',
+        condition=IfCondition(use_rviz),
+        arguments=['-d', rviz_config],
+        parameters=[{
+            'use_sim_time': use_sim_time
+        }]
     )
 
     return LaunchDescription([
-        # Força o uso do CycloneDDS para estabilidade no mapa
-        SetEnvironmentVariable("RMW_IMPLEMENTATION", "rmw_cyclonedds_cpp"),
+        declare_use_rviz,
+        declare_use_sim_time,
+        declare_rviz_config,
 
-        # --- DESCRIÇÃO E TF ---
-        Node(
-            package="robot_state_publisher",
-            executable="robot_state_publisher",
-            name="robot_state_publisher",
-            output="screen",
-            parameters=[{
-                "robot_description": robot_description_content,
-                "use_sim_time": False
-            }],
-        ),
-
-        Node(
-            package="joint_state_publisher",
-            executable="joint_state_publisher",
-            name="joint_state_publisher",
-            output="screen",
-            parameters=[{"use_sim_time": False}]
-        ),
-
-        # TF Estática necessária para o Nav2 não travar sem AMCL
-        Node(
-            package="tf2_ros",
-            executable="static_transform_publisher",
-            name="map_to_odom_broadcaster",
-            arguments=["0", "0", "0", "0", "0", "0", "map", "odom"],
-            output="screen",
-        ),
-
-        # --- BRIDGE COM O TEMI ---
-        Node(
-            package="rav_platform_ctrl",
-            executable="platform_ctrl",
-            name="rav_platform_ctrl",
-            output="screen",
-            parameters=[{"use_sim_time": False}]
-        ),
-
-        # --- MAPA E NAVEGAÇÃO ---
-        Node(
-            package="nav2_map_server",
-            executable="map_server",
-            name="map_server",
-            output="screen",
-            parameters=[{
-                "use_sim_time": False,
-                "yaml_filename": map_file,
-                "topic_name": "map",
-                "frame_id": "map"
-            }],
-        ),
-
-        # Gerencia o ciclo de vida: Sem isto o mapa fica em "Warn" para sempre
-        Node(
-            package="nav2_lifecycle_manager",
-            executable="lifecycle_manager",
-            name="lifecycle_manager_navigation",
-            output="screen",
-            parameters=[{
-                "use_sim_time": False,
-                "autostart": True,
-                "node_names": ["map_server", "controller_server", 
-                               "planner_server", "behavior_server", "bt_navigator"]
-            }],
-        ),
-
-        # Motores de navegação (O que faz o robô andar de verdade)
-        IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(
-                os.path.join(nav2_bringup_dir, 'launch', 'navigation_launch.py')
-            ),
-            launch_arguments={
-                'use_sim_time': 'false',
-                'params_file': nav2_params,
-                'autostart': 'true',
-            }.items(),
-        ),
-
-        # --- VISUALIZAÇÃO ---
-        Node(
-            package="rviz2",
-            executable="rviz2",
-            name="rviz2",
-            arguments=["-d", rviz_config],
-            output="screen",
-            parameters=[{"use_sim_time": False}]
-        ),
+        static_map_to_odom,
+        map_server_node,
+        lifecycle_manager_node,
+        nav2_navigation_launch,
+        rviz_node
     ])

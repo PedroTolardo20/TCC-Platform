@@ -1,10 +1,24 @@
-#!/usr/bin/env bash
-set -e
+#!/bin/bash
 
-cd ~/rav/robotics_ws
+GREEN='\033[0;32m'
+NC='\033[0m' # No Color
 
-export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
-source /opt/ros/humble/setup.bash
-source install/setup.bash
+echo -e "${GREEN}Subindo bringup...${NC}"
+ros2 launch rav_bringup bringup.launch.py &
 
-ros2 launch rav_nav2 rav_nav.launch.py
+echo -e "${GREEN}Esperando robot_state_publisher...${NC}"
+until ros2 node list | grep -q robot_state_publisher; do
+  sleep 0.5
+done
+
+echo -e "${GREEN}Bringup pronto!${NC}"
+
+echo -e "${GREEN}Subindo nav...${NC}"
+ros2 launch rav_nav2 rav_nav.launch.py &
+
+echo -e "${GREEN}Esperando map_server ficar ativo...${NC}"
+until ros2 lifecycle get /map_server | grep -q "active"; do
+  sleep 0.5
+done
+
+echo -e "${GREEN}Nav pronto!${NC}"
