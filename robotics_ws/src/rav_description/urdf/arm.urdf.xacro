@@ -1,6 +1,8 @@
 <?xml version="1.0"?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="arm">
 
+  <xacro:arg name="use_sim" default="false"/>
+
   <xacro:macro name="arm" params="parent_link prefix xyz:='0 0 0' rpy:='0 0 0'">
 
     <xacro:property name="M_PI" value="3.14159"/>
@@ -232,47 +234,49 @@
       </collision>
     </link>
 
-    <ros2_control name="${prefix}GazeboSystem" type="system">
-      <hardware>
-        <plugin>gazebo_ros2_control/GazeboSystem</plugin>
-      </hardware>
+    <xacro:if value="$(arg use_sim)">
+      <ros2_control name="${prefix}GazeboSystem" type="system">
+        <hardware>
+          <plugin>gazebo_ros2_control/GazeboSystem</plugin>
+        </hardware>
 
-      <joint name="${prefix}joint_2">
-        <command_interface name="position"/>
-        <state_interface name="position"/>
-        <state_interface name="velocity"/>
-      </joint>
+        <joint name="${prefix}joint_2">
+          <command_interface name="position"/>
+          <state_interface name="position"/>
+          <state_interface name="velocity"/>
+        </joint>
 
-      <joint name="${prefix}joint_3">
-        <command_interface name="position"/>
-        <state_interface name="position"/>
-        <state_interface name="velocity"/>
-      </joint>
+        <joint name="${prefix}joint_3">
+          <command_interface name="position"/>
+          <state_interface name="position"/>
+          <state_interface name="velocity"/>
+        </joint>
 
-      <joint name="${prefix}joint_4">
-        <command_interface name="position"/>
-        <state_interface name="position"/>
-        <state_interface name="velocity"/>
-      </joint>
+        <joint name="${prefix}joint_4">
+          <command_interface name="position"/>
+          <state_interface name="position"/>
+          <state_interface name="velocity"/>
+        </joint>
 
-      <joint name="${prefix}gripper_joint_1">
-        <command_interface name="position"/>
-        <state_interface name="position"/>
-        <state_interface name="velocity"/>
-      </joint>
+        <joint name="${prefix}gripper_joint_1">
+          <command_interface name="position"/>
+          <state_interface name="position"/>
+          <state_interface name="velocity"/>
+        </joint>
 
-      <joint name="${prefix}gripper_joint_2">
-        <command_interface name="position"/>
-        <state_interface name="position"/>
-        <state_interface name="velocity"/>
-      </joint>
-    </ros2_control>
+        <joint name="${prefix}gripper_joint_2">
+          <command_interface name="position"/>
+          <state_interface name="position"/>
+          <state_interface name="velocity"/>
+        </joint>
+      </ros2_control>
 
-    <gazebo>
-      <plugin filename="libgazebo_ros2_control.so" name="${prefix}gazebo_ros2_control">
-        <parameters>$(find rav_description)/config/arm_controllers.yaml</parameters>
-      </plugin>
-    </gazebo>
+      <gazebo>
+        <plugin filename="libgazebo_ros2_control.so" name="${prefix}gazebo_ros2_control">
+          <parameters>$(find rav_description)/config/arm_controllers.yaml</parameters>
+        </plugin>
+      </gazebo>
+    </xacro:if>
 
   </xacro:macro>
 

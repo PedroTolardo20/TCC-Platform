@@ -1,7 +1,7 @@
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
-from launch.conditions import IfCondition
-from launch.substitutions import LaunchConfiguration, Command
+from launch.conditions import IfCondition, UnlessCondition
+from launch.substitutions import LaunchConfiguration, Command, AndSubstitution, NotSubstitution
 from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
 import os
@@ -13,6 +13,7 @@ def generate_launch_description():
 
     use_rviz = LaunchConfiguration('use_rviz')
     use_joint_state_publisher = LaunchConfiguration('use_joint_state_publisher')
+    use_gui = LaunchConfiguration('use_gui')
     use_platform_ctrl = LaunchConfiguration('use_platform_ctrl')
     use_sim_time = LaunchConfiguration('use_sim_time')
     rviz_config = LaunchConfiguration('rviz_config')
@@ -46,6 +47,12 @@ def generate_launch_description():
         description='Sobe o joint_state_publisher'
     )
 
+    declare_use_gui = DeclareLaunchArgument(
+        'use_gui',
+        default_value='false',
+        description='Usa joint_state_publisher_gui com sliders (substitui o joint_state_publisher)'
+    )
+
     declare_use_platform_ctrl = DeclareLaunchArgument(
         'use_platform_ctrl',
         default_value='true',
@@ -75,12 +82,26 @@ def generate_launch_description():
         }]
     )
 
+    # Modo normal: publica posicoes zeradas (sem GUI)
     joint_state_publisher_node = Node(
         package='joint_state_publisher',
         executable='joint_state_publisher',
         name='joint_state_publisher',
         output='screen',
-        condition=IfCondition(use_joint_state_publisher),
+        condition=IfCondition(AndSubstitution(use_joint_state_publisher, NotSubstitution(use_gui))),
+        parameters=[{
+            'robot_description': robot_description,
+            'use_sim_time': use_sim_time
+        }]
+    )
+
+    # Modo GUI: abre janela com sliders para mover os joints manualmente
+    joint_state_publisher_gui_node = Node(
+        package='joint_state_publisher_gui',
+        executable='joint_state_publisher_gui',
+        name='joint_state_publisher_gui',
+        output='screen',
+        condition=IfCondition(AndSubstitution(use_joint_state_publisher, use_gui)),
         parameters=[{
             'robot_description': robot_description,
             'use_sim_time': use_sim_time
@@ -110,11 +131,13 @@ def generate_launch_description():
     return LaunchDescription([
         declare_use_rviz,
         declare_use_joint_state_publisher,
+        declare_use_gui,
         declare_use_platform_ctrl,
         declare_use_sim_time,
         declare_rviz_config,
         robot_state_publisher_node,
         joint_state_publisher_node,
+        joint_state_publisher_gui_node,
         platform_ctrl_node,
         rviz_node,
     ])
