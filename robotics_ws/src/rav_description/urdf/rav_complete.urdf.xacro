@@ -12,7 +12,7 @@
   <xacro:arm
     parent_link="platform_base_link"
     prefix="arm_"
-    xyz="0 1 0.69"
+    xyz="0.07 0 0.69"
     rpy="0 0 1.57"/>
 
 </robot>
