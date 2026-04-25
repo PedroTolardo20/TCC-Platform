@@ -1,0 +1,44 @@
+<?xml version="1.0"?>
+<robot name="rav_arm">
+
+  <!-- parent_frame="world" é o frame TF externo; child_link="arm_world" é o link raiz da URDF -->
+  <virtual_joint name="virtual_joint" type="fixed" parent_frame="world" child_link="arm_world"/>
+
+  <!-- Grupo de planejamento do braço (3 DOF) -->
+  <group name="arm">
+    <joint name="arm_joint_2"/>
+    <joint name="arm_joint_3"/>
+    <joint name="arm_joint_4"/>
+  </group>
+
+  <!-- Grupo de planejamento da garra -->
+  <group name="gripper">
+    <joint name="arm_gripper_joint_1"/>
+    <joint name="arm_gripper_joint_2"/>
+  </group>
+
+  <!-- End effector -->
+  <end_effector name="gripper" parent_link="arm_link_4" group="gripper"/>
+
+  <!-- Estados nomeados do braço -->
+  <group_state name="home" group="arm">
+    <joint name="arm_joint_2" value="0"/>
+    <joint name="arm_joint_3" value="0"/>
+    <joint name="arm_joint_4" value="0"/>
+  </group_state>
+
+  <!-- Estados nomeados da garra (radius_6 = 0.02) -->
+  <group_state name="open" group="gripper">
+    <joint name="arm_gripper_joint_1" value="0.03"/>
+    <joint name="arm_gripper_joint_2" value="-0.03"/>
+  </group_state>
+
+  <group_state name="closed" group="gripper">
+    <joint name="arm_gripper_joint_1" value="0.01"/>
+    <joint name="arm_gripper_joint_2" value="-0.01"/>
+  </group_state>
+
+  <!-- disable_collisions removidos: deixar o Setup Assistant gerá-los pela aba
+       "Default Collisions" para evitar o segfault conhecido do Humble -->
+
+</robot>

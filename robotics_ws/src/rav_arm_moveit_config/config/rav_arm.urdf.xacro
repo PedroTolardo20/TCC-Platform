@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<robot name="rav_arm" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <xacro:include filename="$(find rav_description)/urdf/arm.urdf.xacro"/>
+
+  <!-- Link raiz fixo — nome diferente de "world" para evitar conflito com o virtual_joint do SRDF -->
+  <link name="arm_world"/>
+
+  <xacro:arm
+    parent_link="arm_world"
+    prefix="arm_"
+    xyz="0 0 0"
+    rpy="0 0 0"/>
+
+</robot>
