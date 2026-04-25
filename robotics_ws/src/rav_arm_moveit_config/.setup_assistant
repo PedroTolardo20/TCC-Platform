@@ -1,10 +1,10 @@
 moveit_setup_assistant_config:
-  URDF:
+  urdf:
     package: rav_arm_moveit_config
     relative_path: config/rav_arm.urdf
-  SRDF:
+  srdf:
     relative_path: config/rav_arm.srdf
-  CONFIG:
+  package_settings:
     author_name: Nathan Conconi
     author_email: nathanconconi24@gmail.com
-    generated_timestamp: 0
+    generated_timestamp: 1777088818

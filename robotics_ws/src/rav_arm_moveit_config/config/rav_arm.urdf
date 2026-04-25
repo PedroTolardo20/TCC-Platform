@@ -62,7 +62,7 @@
     <parent link="arm_base_link"/>
     <child link="arm_link_2"/>
     <axis xyz="1 0 0"/>
-    <limit effort="300.0" lower="0.0" upper="6.28318" velocity="1.0"/>
+    <limit effort="300.0" lower="-0.3" upper="1.9787" velocity="1.0"/>
   </joint>
   <link name="arm_link_2">
     <inertial>
@@ -127,7 +127,7 @@
     <parent link="arm_link_2"/>
     <child link="arm_link_3"/>
     <axis xyz="1 0 0"/>
-    <limit effort="300.0" lower="0.0" upper="6.28318" velocity="1.0"/>
+    <limit effort="300.0" lower="0.0" upper="2.3952" velocity="1.0"/>
   </joint>
   <link name="arm_link_3">
     <inertial>
@@ -163,7 +163,7 @@
     <parent link="arm_link_3"/>
     <child link="arm_link_4"/>
     <axis xyz="1 0 0"/>
-    <limit effort="300.0" lower="-3.14159" upper="3.14159" velocity="1.0"/>
+    <limit effort="300.0" lower="-1" upper="1.5" velocity="1.0"/>
   </joint>
   <link name="arm_link_4">
     <inertial>
@@ -205,14 +205,16 @@
     <parent link="arm_link_4"/>
     <child link="arm_gripper_link_1"/>
     <axis xyz="1 0 0"/>
-    <limit effort="100.0" lower="0.01" upper="0.03" velocity="1.0"/>
+    <limit effort="100.0" lower="0.01" upper="0.05" velocity="1.0"/>
   </joint>
   <joint name="arm_gripper_joint_2" type="prismatic">
     <origin rpy="0 0 0" xyz="0 0 0.0856"/>
     <parent link="arm_link_4"/>
     <child link="arm_gripper_link_2"/>
     <axis xyz="1 0 0"/>
-    <limit effort="100.0" lower="-0.03" upper="-0.01" velocity="1.0"/>
+    <limit effort="100.0" lower="-0.05" upper="-0.01" velocity="1.0"/>
+  
+    <mimic joint="arm_gripper_joint_1" multiplier="-1.0" offset="0.0"/>
   </joint>
   <joint name="arm_gripper_frame_joint" type="fixed">
     <origin rpy="0 0 0" xyz="0 0 0.1206"/>
@@ -235,7 +237,7 @@
     <collision>
       <origin rpy="0 0 0" xyz="0 0 0.01"/>
       <geometry>
-        <box size="0.04 0.04 0.07"/>
+        <box size="0.02 0.02 0.07"/>
       </geometry>
     </collision>
   </link>
@@ -264,7 +266,7 @@
     <collision>
       <origin rpy="0 0 0" xyz="0 0 0.01"/>
       <geometry>
-        <box size="0.04 0.04 0.07"/>
+        <box size="0.02 0.02 0.07"/>
       </geometry>
     </collision>
   </link>
