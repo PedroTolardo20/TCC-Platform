@@ -1,0 +1,60 @@
+<?xml version="1.0"?>
+<!-- Standalone robot used by the MoveIt demo, with mock ros2_control hardware. -->
+<robot name="rav_manipulator" xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:arg name="use_fake_hardware" default="true"/>
+  <xacro:include filename="$(find rav_description)/urdf/rav_manipulator.urdf.xacro"/>
+
+  <link name="manipulator_world"/>
+  <xacro:rav_manipulator
+      parent_link="manipulator_world"
+      mount_xyz="0 0 0"
+      mount_rpy="0 0 0"
+      use_fake_hardware="false"/>
+
+  <!-- Plugin RAV em modo seguro: não abre serial nem movimenta motores. -->
+  <ros2_control name="RavManipuladorDynamixelRealUnmounted" type="system">
+    <hardware>
+      <plugin>rav_dynamixel_hardware/RavDynamixelHardware</plugin>
+      <param name="dry_run">false</param>
+      <param name="enable_motors">true</param>
+      <param name="device">/dev/serial/by-id/usb-CM-900_ROBOTIS_Virtual_COM_Port-if00</param>
+      <param name="baud">1000000</param>
+      <param name="profile_velocity">8</param>
+      <param name="profile_acceleration">3</param>
+    </hardware>
+
+    <joint name="shoulder_joint">
+      <param name="id">1</param>
+      <param name="direction">1</param>
+      <param name="zero_tick">2048</param>
+      <param name="min_tick">1024</param>
+      <param name="max_tick">3072</param>
+      <command_interface name="position"/>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+
+    <joint name="elbow_joint">
+      <param name="id">2</param>
+      <param name="direction">1</param>
+      <param name="zero_tick">2048</param>
+      <param name="min_tick">1024</param>
+      <param name="max_tick">3072</param>
+      <command_interface name="position"/>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+
+    <joint name="wrist_joint">
+      <param name="id">3</param>
+      <param name="direction">1</param>
+      <param name="zero_tick">2048</param>
+      <param name="min_tick">1024</param>
+      <param name="max_tick">3072</param>
+      <command_interface name="position"/>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+  </ros2_control>
+
+</robot>

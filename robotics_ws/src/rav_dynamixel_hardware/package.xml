@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>rav_dynamixel_hardware</name>
+  <version>0.0.1</version>
+  <description>Interface ros2_control segura para os Dynamixel XM540 do manipulador RAV.</description>
+
+  <maintainer email="nathanconconi042@gmail.com">Nathan Conconi</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>hardware_interface</depend>
+  <depend>pluginlib</depend>
+  <depend>rclcpp</depend>
+  <depend>rclcpp_lifecycle</depend>
+  <depend>dynamixel_sdk</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

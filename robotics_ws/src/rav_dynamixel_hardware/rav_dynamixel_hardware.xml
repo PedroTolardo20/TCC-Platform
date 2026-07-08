@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<library path="rav_dynamixel_hardware">
+  <class
+    name="rav_dynamixel_hardware/RavDynamixelHardware"
+    type="rav_dynamixel_hardware::RavDynamixelHardware"
+    base_class_type="hardware_interface::SystemInterface">
+    <description>
+      Interface ros2_control do manipulador RAV.
+      Nesta primeira etapa, opera exclusivamente em dry-run.
+    </description>
+  </class>
+</library>
