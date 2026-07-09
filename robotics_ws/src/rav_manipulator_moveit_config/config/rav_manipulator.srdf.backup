@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<robot name="rav_manipulator">
+  <group name="rav_arm">
+    <chain base_link="manipulator_base_link" tip_link="wrist_link"/>
+  </group>
+
+  <group_state name="cad_reference" group="rav_arm">
+    <joint name="shoulder_joint" value="0.0"/>
+    <joint name="elbow_joint" value="0.0"/>
+    <joint name="wrist_joint" value="0.0"/>
+  </group_state>
+
+  <virtual_joint
+      name="virtual_joint"
+      type="fixed"
+      parent_frame="world"
+      child_link="manipulator_world"/>
+
+  <disable_collisions link1="manipulator_base_link" link2="shoulder_link" reason="Adjacent"/>
+  <disable_collisions link1="shoulder_link" link2="elbow_link" reason="Adjacent"/>
+  <disable_collisions link1="elbow_link" link2="wrist_link" reason="Adjacent"/>
+  <disable_collisions link1="wrist_link" link2="gripper_mount" reason="Adjacent"/>
+</robot>

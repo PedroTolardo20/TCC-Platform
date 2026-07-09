@@ -1,0 +1,269 @@
+<?xml version="1.0"?>
+<robot name="rav_physics_arm" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!--
+    Physical first-pass model for the TCC manipulator.
+
+    Goal:
+    - Validate gravity / torque behavior with gz_ros2_control effort interface.
+    - Use the TCC static-analysis masses instead of placeholder masses.
+    - Keep this package separate from rav_description and MoveIt.
+
+    This is intentionally simplified visually. It is a physical validation model,
+    not the final CAD mesh model.
+
+    Units:
+    - SI: meters, kg, rad, N*m.
+    - gravity in Gazebo default world is 9.8 m/s². The TCC calculation used 10 m/s²,
+      which is close enough for the first simulation check.
+
+    Mass model:
+    Link 1 assembly:
+      P1 = 0.64584 kg, L1 = 0.260 m
+      Aço 1 = 0.1974 kg
+      Dynamixel M2 = 0.165 kg
+      total = 1.00824 kg
+      COM ≈ 0.130913 m from shoulder
+
+    Link 2 assembly:
+      P2 = 0.621 kg, L2 = 0.250 m
+      Aço 2 = 0.4305 kg
+      Dynamixel M3 = 0.165 kg
+      total = 1.2165 kg
+      COM ≈ 0.121429 m from elbow
+
+    Distal assembly:
+      base mass = 0.8 kg
+      optional payload arg = 0.0 or 1.0 kg
+      this first model places that mass at the wrist frame.
+  -->
+
+  <xacro:arg name="payload" default="0.0"/>
+
+  <xacro:property name="l1" value="0.260"/>
+  <xacro:property name="l2" value="0.250"/>
+  <xacro:property name="thickness" value="0.055"/>
+
+  <xacro:property name="m_link1" value="1.00824"/>
+  <xacro:property name="com_link1" value="0.130913"/>
+
+  <xacro:property name="m_link2" value="1.21650"/>
+  <xacro:property name="com_link2" value="0.121429"/>
+
+  <xacro:property name="m_distal" value="${0.800 + $(arg payload)}"/>
+
+  <xacro:property name="home_shoulder" value="-0.4200"/>
+  <xacro:property name="home_elbow" value="1.1800"/>
+  <xacro:property name="home_wrist" value="0.8240"/>
+
+  <material name="base_dark">
+    <color rgba="0.10 0.10 0.10 1.0"/>
+  </material>
+  <material name="link_grey">
+    <color rgba="0.55 0.55 0.55 1.0"/>
+  </material>
+  <material name="motor_blue">
+    <color rgba="0.05 0.15 0.70 1.0"/>
+  </material>
+  <material name="payload_orange">
+    <color rgba="0.95 0.45 0.05 1.0"/>
+  </material>
+
+  <xacro:macro name="box_inertia" params="mass x y z">
+    <inertia
+      ixx="${mass / 12.0 * (y*y + z*z)}" ixy="0.0" ixz="0.0"
+      iyy="${mass / 12.0 * (x*x + z*z)}" iyz="0.0"
+      izz="${mass / 12.0 * (x*x + y*y)}"/>
+  </xacro:macro>
+
+  <link name="world"/>
+
+  <link name="base_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.18 0.18 0.10"/>
+      </geometry>
+      <material name="base_dark"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.18 0.18 0.10"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="10.0"/>
+      <xacro:box_inertia mass="10.0" x="0.18" y="0.18" z="0.10"/>
+    </inertial>
+  </link>
+
+  <joint name="world_to_base" type="fixed">
+    <parent link="world"/>
+    <child link="base_link"/>
+    <origin xyz="0 0 0.85" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Link 1 points along +Z at zero. Shoulder rotation axis is X. -->
+  <link name="link1">
+    <visual>
+      <origin xyz="0 0 ${l1/2.0}" rpy="0 0 0"/>
+      <geometry>
+        <box size="${thickness} ${thickness} ${l1}"/>
+      </geometry>
+      <material name="link_grey"/>
+    </visual>
+    <visual>
+      <origin xyz="0 0 ${l1}" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.085 0.085 0.075"/>
+      </geometry>
+      <material name="motor_blue"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 ${l1/2.0}" rpy="0 0 0"/>
+      <geometry>
+        <box size="${thickness} ${thickness} ${l1}"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <origin xyz="0 0 ${com_link1}" rpy="0 0 0"/>
+      <mass value="${m_link1}"/>
+      <xacro:box_inertia mass="${m_link1}" x="${thickness}" y="${thickness}" z="${l1}"/>
+    </inertial>
+  </link>
+
+  <joint name="shoulder_joint" type="revolute">
+    <parent link="base_link"/>
+    <child link="link1"/>
+    <origin xyz="0 0 0.06" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit effort="10.0" lower="${-pi/2.0}" upper="${pi/2.0}" velocity="0.50"/>
+    <dynamics damping="0.20" friction="0.0"/>
+  </joint>
+
+  <!-- Link 2 also points along +Z in its own frame at zero. -->
+  <link name="link2">
+    <visual>
+      <origin xyz="0 0 ${l2/2.0}" rpy="0 0 0"/>
+      <geometry>
+        <box size="${thickness} ${thickness} ${l2}"/>
+      </geometry>
+      <material name="link_grey"/>
+    </visual>
+    <visual>
+      <origin xyz="0 0 ${l2}" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.085 0.085 0.075"/>
+      </geometry>
+      <material name="motor_blue"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 ${l2/2.0}" rpy="0 0 0"/>
+      <geometry>
+        <box size="${thickness} ${thickness} ${l2}"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <origin xyz="0 0 ${com_link2}" rpy="0 0 0"/>
+      <mass value="${m_link2}"/>
+      <xacro:box_inertia mass="${m_link2}" x="${thickness}" y="${thickness}" z="${l2}"/>
+    </inertial>
+  </link>
+
+  <joint name="elbow_joint" type="revolute">
+    <parent link="link1"/>
+    <child link="link2"/>
+    <origin xyz="0 0 ${l1}" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit effort="10.0" lower="${-pi/2.0}" upper="${pi/2.0}" velocity="0.50"/>
+    <dynamics damping="0.20" friction="0.0"/>
+  </joint>
+
+  <link name="wrist_payload_link">
+    <visual>
+      <origin xyz="0 0 0.035" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.10 0.10 0.07"/>
+      </geometry>
+      <material name="payload_orange"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0.035" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.10 0.10 0.07"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <origin xyz="0 0 0.035" rpy="0 0 0"/>
+      <mass value="${m_distal}"/>
+      <xacro:box_inertia mass="${m_distal}" x="0.10" y="0.10" z="0.07"/>
+    </inertial>
+  </link>
+
+  <joint name="wrist_joint" type="revolute">
+    <parent link="link2"/>
+    <child link="wrist_payload_link"/>
+    <origin xyz="0 0 ${l2}" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit effort="10.0" lower="${-pi/2.0}" upper="${pi/2.0}" velocity="0.50"/>
+    <dynamics damping="0.15" friction="0.0"/>
+  </joint>
+
+  <link name="tcp_link"/>
+  <joint name="tcp_fixed_joint" type="fixed">
+    <parent link="wrist_payload_link"/>
+    <child link="tcp_link"/>
+    <origin xyz="0 0 0.07" rpy="0 0 0"/>
+  </joint>
+
+  <ros2_control name="GazeboSimSystem" type="system">
+    <hardware>
+      <plugin>gz_ros2_control/GazeboSimSystem</plugin>
+    </hardware>
+
+    <joint name="shoulder_joint">
+      <command_interface name="effort">
+        <param name="min">-10.0</param>
+        <param name="max">10.0</param>
+      </command_interface>
+      <state_interface name="position">
+        <param name="initial_value">${home_shoulder}</param>
+      </state_interface>
+      <state_interface name="velocity"/>
+      <state_interface name="effort"/>
+    </joint>
+
+    <joint name="elbow_joint">
+      <command_interface name="effort">
+        <param name="min">-10.0</param>
+        <param name="max">10.0</param>
+      </command_interface>
+      <state_interface name="position">
+        <param name="initial_value">${home_elbow}</param>
+      </state_interface>
+      <state_interface name="velocity"/>
+      <state_interface name="effort"/>
+    </joint>
+
+    <joint name="wrist_joint">
+      <command_interface name="effort">
+        <param name="min">-10.0</param>
+        <param name="max">10.0</param>
+      </command_interface>
+      <state_interface name="position">
+        <param name="initial_value">${home_wrist}</param>
+      </state_interface>
+      <state_interface name="velocity"/>
+      <state_interface name="effort"/>
+    </joint>
+  </ros2_control>
+
+  <gazebo>
+    <plugin filename="gz_ros2_control-system" name="gz_ros2_control::GazeboSimROS2ControlPlugin">
+      <parameters>$(find rav_physics_sim)/config/rav_effort_controllers.yaml</parameters>
+    </plugin>
+  </gazebo>
+
+</robot>

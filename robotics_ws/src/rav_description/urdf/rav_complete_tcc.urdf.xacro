@@ -1,0 +1,53 @@
+<?xml version="1.0"?>
+<!--
+  RAV completo + manipulador real do TCC.
+
+  Este arquivo é separado de rav_complete.urdf.xacro, portanto não altera
+  o modelo antigo/genérico nem o bringup atual.
+
+  Referência de montagem:
+  - O Dynamixel 1 é parafusado diretamente na estrutura interna do RAV.
+  - Como o URDF atual não possui uma mesh/link separado da estrutura interna,
+    o frame de montagem é representado como uma junta fixa a partir de
+    platform_base_link.
+  - mount_xyz é a posição do CENTRO DO HORN do Dynamixel 1 no frame
+    platform_base_link.
+-->
+<robot name="rav_complete_tcc" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <xacro:arg name="use_fake_hardware" default="false"/>
+
+  <xacro:include filename="$(find rav_description)/urdf/platform_with_mesh_and_wheels.urdf.xacro"/>
+  <xacro:include filename="$(find rav_description)/urdf/rav_body.urdf.xacro"/>
+  <xacro:include filename="$(find rav_description)/urdf/rav_manipulator.urdf.xacro"/>
+
+  <xacro:rav_platform/>
+  <xacro:rav_body parent_link="platform_base_link" xyz="0 0 0.2572" rpy="0 0 0"/>
+
+  <!--
+    PONTO DE AJUSTE DA MONTAGEM DO BRAÇO
+
+    Valor inicial baseado no mount do antigo rav_complete.urdf.xacro:
+      antigo joint do ombro: x=0.07, y=0.0, z=0.73, yaw=+90 graus.
+
+    Neste modelo, o mount aponta diretamente para J1, o centro do horn
+    do Dynamixel 1. Ajuste somente estes quatro valores ao alinhar com o CAD:
+      rav_mount_x, rav_mount_y, rav_mount_z, rav_mount_yaw
+
+    Unidades: metros e radianos.
+    Exemplos: 10 mm = 0.010; 90 graus = 1.57079632679.
+  -->
+  <xacro:property name="rav_mount_x" value="0.070"/>
+  <xacro:property name="rav_mount_y" value="0.000"/>
+  <xacro:property name="rav_mount_z" value="0.730"/>
+  <xacro:property name="rav_mount_roll"  value="0.0"/>
+  <xacro:property name="rav_mount_pitch" value="0.0"/>
+  <xacro:property name="rav_mount_yaw"   value="1.57079632679"/>
+
+  <xacro:rav_manipulator
+      parent_link="platform_base_link"
+      mount_xyz="${rav_mount_x} ${rav_mount_y} ${rav_mount_z}"
+      mount_rpy="${rav_mount_roll} ${rav_mount_pitch} ${rav_mount_yaw}"
+      use_fake_hardware="$(arg use_fake_hardware)"/>
+
+</robot>

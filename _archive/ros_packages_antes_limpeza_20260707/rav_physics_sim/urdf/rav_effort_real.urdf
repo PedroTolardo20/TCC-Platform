@@ -1,0 +1,180 @@
+<?xml version='1.0' encoding='utf-8'?>
+<robot name="rav_real_physics_arm">
+  <material name="rav_manipulator_motor">
+    <color rgba="0.16 0.16 0.16 1.0" />
+  </material>
+  <material name="rav_manipulator_structure">
+    <color rgba="0.58 0.58 0.60 1.0" />
+  </material>
+  <link name="world" />
+  <link name="sim_anchor">
+    <inertial>
+      <origin xyz="0.000000000000 0.000000000000 0.000000000000" rpy="0 0 0" />
+      <mass value="1000.000000000000" />
+      <inertia ixx="0.002000" ixy="0.0" ixz="0.0" iyy="0.002000" iyz="0.0" izz="0.002000" />
+    </inertial>
+  </link>
+  <joint name="world_to_sim_anchor" type="fixed">
+    <parent link="world" />
+    <child link="sim_anchor" />
+    <origin xyz="0 0 0" rpy="0 0 0" />
+  </joint>
+  <joint name="sim_anchor_to_manipulator_base" type="fixed">
+    <parent link="sim_anchor" />
+    <child link="manipulator_base_link" />
+    <origin xyz="0.07 0.0 0.73" rpy="0.0 0.0 1.57079632679" />
+  </joint>
+  <link name="manipulator_base_link">
+    <visual name="visual_0">
+      <origin rpy="0 0 0" xyz="0 0.047471563258 -0.733684638388" />
+      <geometry>
+        <mesh filename="file:///home/nathan/rav/robotics_ws/src/rav_description/meshes/manipulator/dynamixel_xm540.stl" scale="0.001 0.001 0.001" />
+      </geometry>
+      <material name="rav_manipulator_motor" />
+    </visual>
+    <inertial>
+      <origin xyz="0.000000000000 0.000000000000 0.000000000000" rpy="0 0 0" />
+      <mass value="0.165000000000" />
+      <inertia ixx="0.002000" ixy="0.0" ixz="0.0" iyy="0.002000" iyz="0.0" izz="0.002000" />
+    </inertial>
+  </link>
+  <link name="shoulder_link">
+    <visual name="visual_0">
+      <origin rpy="0 0 0" xyz="0 0.047471563258 -0.733684638388" />
+      <geometry>
+        <mesh filename="file:///home/nathan/rav/robotics_ws/src/rav_description/meshes/manipulator/link_1_assembly.stl" scale="0.001 0.001 0.001" />
+      </geometry>
+      <material name="rav_manipulator_structure" />
+    </visual>
+    <visual name="visual_1">
+      <origin rpy="0 0 0" xyz="0 0.047501203241 -0.455566565469" />
+      <geometry>
+        <mesh filename="file:///home/nathan/rav/robotics_ws/src/rav_description/meshes/manipulator/dynamixel_xm540.stl" scale="0.001 0.001 0.001" />
+      </geometry>
+      <material name="rav_manipulator_motor" />
+    </visual>
+    <inertial>
+      <origin xyz="0.000000000000 0.000016086600 0.150943882957" rpy="0 0 0" />
+      <mass value="1.008240000000" />
+      <inertia ixx="0.006753079216" ixy="0.0" ixz="0.0" iyy="0.006753079216" iyz="0.0" izz="0.000508321000" />
+    </inertial>
+  </link>
+  <link name="elbow_link">
+    <visual name="visual_0">
+      <origin rpy="0 0 0" xyz="0 0.047441923275 -1.011802711307" />
+      <geometry>
+        <mesh filename="file:///home/nathan/rav/robotics_ws/src/rav_description/meshes/manipulator/link_2_assembly.stl" scale="0.001 0.001 0.001" />
+      </geometry>
+      <material name="rav_manipulator_structure" />
+    </visual>
+    <visual name="visual_1">
+      <origin rpy="1.57079632679 0 0" xyz="0 0.390654450797 0.047456004289" />
+      <geometry>
+        <mesh filename="file:///home/nathan/rav/robotics_ws/src/rav_description/meshes/manipulator/dynamixel_xm540.stl" scale="0.001 0.001 0.001" />
+      </geometry>
+      <material name="rav_manipulator_motor" />
+    </visual>
+    <inertial>
+      <origin xyz="0.000000000000 -0.158868776232 -0.000007205880" rpy="0 0 0" />
+      <mass value="1.051500000000" />
+      <inertia ixx="0.010575873950" ixy="0.0" ixz="0.0" iyy="0.010575873950" iyz="0.0" izz="0.000530131250" />
+    </inertial>
+  </link>
+  <link name="wrist_link">
+    <visual name="visual_0">
+      <origin rpy="0 0 0" xyz="0 0.390472110866 -1.011787152338" />
+      <geometry>
+        <mesh filename="file:///home/nathan/rav/robotics_ws/src/rav_description/meshes/manipulator/wrist_assembly.stl" scale="0.001 0.001 0.001" />
+      </geometry>
+      <material name="rav_manipulator_structure" />
+    </visual>
+    <visual name="visual_1">
+      <origin rpy="1.57079632679 0 1.57079632679" xyz="-0.718 -0.0619 0.0499" />
+      <geometry>
+        <mesh filename="file:///home/nathan/rav/robotics_ws/src/rav_description/meshes/manipulator/dynamixel_xm540.stl" scale="0.001 0.001 0.001" />
+      </geometry>
+      <material name="rav_manipulator_motor" />
+    </visual>
+    <inertial>
+      <origin xyz="0.000000000000 0.000000000000 0.000000000000" rpy="0 0 0" />
+      <mass value="0.001000000000" />
+      <inertia ixx="0.002000" ixy="0.0" ixz="0.0" iyy="0.002000" iyz="0.0" izz="0.002000" />
+    </inertial>
+  </link>
+  <link name="gripper_mount">
+    <inertial>
+      <origin xyz="0.000000000000 0.000000000000 0.000000000000" rpy="0 0 0" />
+      <mass value="0.800000000000" />
+      <inertia ixx="0.002000" ixy="0.0" ixz="0.0" iyy="0.002000" iyz="0.0" izz="0.002000" />
+    </inertial>
+  </link>
+  <joint name="shoulder_joint" type="revolute">
+    <origin rpy="0 0 0" xyz="0 0 0" />
+    <parent link="manipulator_base_link" />
+    <child link="shoulder_link" />
+    <axis xyz="1 0 0" />
+    <limit effort="10.0" lower="-1.5707963267948966" upper="1.5707963267948966" velocity="0.5" />
+  </joint>
+  <joint name="elbow_joint" type="revolute">
+    <origin rpy="0 0 0" xyz="0 2.9639983e-05 0.278118072919" />
+    <parent link="shoulder_link" />
+    <child link="elbow_link" />
+    <axis xyz="1 0 0" />
+    <limit effort="10.0" lower="-1.5707963267948966" upper="1.5707963267948966" velocity="0.5" />
+  </joint>
+  <joint name="wrist_joint" type="revolute">
+    <origin rpy="0 0 0" xyz="0 -0.343030187591 -1.5558969e-05" />
+    <parent link="elbow_link" />
+    <child link="wrist_link" />
+    <axis xyz="1 0 0" />
+    <limit effort="10.0" lower="-1.5707963267948966" upper="1.5707963267948966" velocity="0.5" />
+  </joint>
+  <joint name="gripper_mount_joint" type="fixed">
+    <origin rpy="0 0 0" xyz="0 0 0" />
+    <parent link="wrist_link" />
+    <child link="gripper_mount" />
+  </joint>
+  <ros2_control name="GazeboSimSystem" type="system">
+    <hardware>
+      <plugin>gz_ros2_control/GazeboSimSystem</plugin>
+    </hardware>
+    <joint name="shoulder_joint">
+      <command_interface name="effort">
+        <param name="min">-10.0</param>
+        <param name="max">10.0</param>
+      </command_interface>
+      <state_interface name="position">
+        <param name="initial_value">-0.420000</param>
+      </state_interface>
+      <state_interface name="velocity" />
+      <state_interface name="effort" />
+    </joint>
+    <joint name="elbow_joint">
+      <command_interface name="effort">
+        <param name="min">-10.0</param>
+        <param name="max">10.0</param>
+      </command_interface>
+      <state_interface name="position">
+        <param name="initial_value">1.180000</param>
+      </state_interface>
+      <state_interface name="velocity" />
+      <state_interface name="effort" />
+    </joint>
+    <joint name="wrist_joint">
+      <command_interface name="effort">
+        <param name="min">-10.0</param>
+        <param name="max">10.0</param>
+      </command_interface>
+      <state_interface name="position">
+        <param name="initial_value">0.824000</param>
+      </state_interface>
+      <state_interface name="velocity" />
+      <state_interface name="effort" />
+    </joint>
+  </ros2_control>
+  <gazebo>
+    <plugin filename="gz_ros2_control-system" name="gz_ros2_control::GazeboSimROS2ControlPlugin">
+      <parameters>/home/nathan/rav/robotics_ws/src/rav_physics_sim/config/rav_effort_controllers.yaml</parameters>
+    </plugin>
+  </gazebo>
+</robot>

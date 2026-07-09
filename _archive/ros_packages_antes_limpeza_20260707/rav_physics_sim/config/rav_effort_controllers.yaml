@@ -1,0 +1,46 @@
+controller_manager:
+  ros__parameters:
+    update_rate: 1000
+
+    arm_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+arm_controller:
+  ros__parameters:
+    joints:
+      - shoulder_joint
+      - elbow_joint
+      - wrist_joint
+
+    command_interfaces:
+      - effort
+
+    state_interfaces:
+      - position
+      - velocity
+
+    allow_partial_joints_goal: false
+    open_loop_control: false
+
+    gains:
+      shoulder_joint:
+        p: 85.0
+        i: 0.0
+        d: 7.0
+        i_clamp: 0.0
+        antiwindup: false
+      elbow_joint:
+        p: 60.0
+        i: 0.0
+        d: 5.0
+        i_clamp: 0.0
+        antiwindup: false
+      wrist_joint:
+        p: 25.0
+        i: 0.0
+        d: 2.0
+        i_clamp: 0.0
+        antiwindup: false

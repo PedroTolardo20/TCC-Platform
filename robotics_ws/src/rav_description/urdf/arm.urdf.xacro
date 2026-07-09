@@ -1,328 +1,218 @@
 <?xml version="1.0"?>
+<!-- ============================================================================
+     arm.urdf.xacro  -  Manipulador do RAV (3R planar + garra de 2 dedos)
+     Reescrito com a geometria REAL do projeto, substituindo o braço genérico.
+     ROS 2 Humble.
+
+     Nomes de juntas/links MANTIDOS do modelo anterior, para que o
+     rav_arm_moveit_config e os controllers continuem compatíveis:
+       joint_2 = ombro (M1) | joint_3 = cotovelo (M2) | joint_4 = punho (M3)
+       gripper_joint_1/2 = garra (M4)
+
+     Convenção (igual à do repo): elos se estendem em +Z local; juntas do braço
+     giram em torno de X local (planar). Montagem feita pela macro com rpy/xyz.
+
+     Valores CONFIRMADOS (TCC) e PLACEHOLDERS (TODO) marcados abaixo.
+     Nenhum placeholder deve ser tratado como spec real.
+============================================================================= -->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="arm">
 
   <xacro:arg name="use_sim" default="false"/>
 
   <xacro:macro name="arm" params="parent_link prefix xyz:='0 0 0' rpy:='0 0 0'">
 
-    <xacro:property name="M_PI" value="3.14159"/>
-    <xacro:property name="mass_1" value="20"/>
-    <xacro:property name="mass_2" value="5"/>
-    <xacro:property name="mass_3" value="3"/>
-    <xacro:property name="mass_4" value="3"/>
-    <xacro:property name="mass_5" value="1"/>
-    <xacro:property name="mass_6" value="0.2"/>
+    <!-- == CONFIRMADOS (TCC) == -->
+    <xacro:property name="L1"    value="0.260"/>   <!-- P1: ombro  -> cotovelo -->
+    <xacro:property name="L2"    value="0.250"/>   <!-- P2: cotovelo -> punho  -->
+    <xacro:property name="sec_x" value="0.050"/>   <!-- seção PLA (base) -->
+    <xacro:property name="sec_y" value="0.040"/>   <!-- seção PLA (altura) -->
 
-    <xacro:property name="radius_1" value="0.1"/>
-    <xacro:property name="radius_2" value="0.05"/>
-    <xacro:property name="radius_3" value="0.025"/>
-    <xacro:property name="radius_4" value="0.025"/> 
-    <xacro:property name="radius_5" value="0.022"/>
-    <xacro:property name="radius_6" value="0.02"/>
+    <!-- == PLACEHOLDERS (medir no Shapr3D / confirmar) == -->
+    <xacro:property name="L3"      value="0.080"/>   <!-- TODO: punho -> base da garra -->
+    <xacro:property name="m_base"  value="0.300"/>   <!-- TODO: massa real -->
+    <xacro:property name="m_link2" value="0.500"/>   <!-- TODO: PLA P1 + perfil U + motor -->
+    <xacro:property name="m_link3" value="0.400"/>   <!-- TODO: PLA P2 + perfil U + motor -->
+    <xacro:property name="m_link4" value="0.300"/>   <!-- TODO: punho + motor -->
+    <xacro:property name="lim_lo"  value="${-pi/2}"/> <!-- TODO: faixa mecânica real -->
+    <xacro:property name="lim_hi"  value="${ pi/2}"/> <!-- TODO -->
+    <xacro:property name="j_eff"   value="10.0"/>    <!-- N.m (limite de projeto; XM540 nom. ~10.6) -->
+    <xacro:property name="j_vel"   value="3.0"/>     <!-- TODO: confirmar na ficha XM540-W270 -->
+    <!-- garra (stub ate o projeto da garra fechar) -->
+    <xacro:property name="grip_len"   value="0.040"/> <!-- TODO -->
+    <xacro:property name="grip_open"  value="0.030"/> <!-- TODO -->
+    <xacro:property name="m_finger"   value="0.030"/> <!-- TODO -->
 
-    <xacro:property name="length_1" value="0.15"/>
-    <xacro:property name="length_2" value="0.4"/>
-    <xacro:property name="length_3" value="0.4"/>
-    <xacro:property name="length_4" value="0.2"/>
-    <xacro:property name="length_5" value="0.12"/>
-    <xacro:property name="length_6" value="0.07"/>
+    <material name="pla">    <color rgba="0.15 0.15 0.15 1.0"/></material>
+    <material name="bracket"><color rgba="0.30 0.30 0.35 1.0"/></material>
+    <material name="finger"> <color rgba="0.70 0.10 0.10 1.0"/></material>
 
-    <!-- Original -->
-    <!-- <xacro:property name="length_1" value="0.15"/>
-    <xacro:property name="length_2" value="0.4"/>
-    <xacro:property name="length_3" value="0.5"/>
-    <xacro:property name="length_4" value="0.3"/>
-    <xacro:property name="length_5" value="0.15"/>
-    <xacro:property name="length_6" value="0.07"/> -->
-
-    <material name="Black"><color rgba="0.0 0.0 0.0 1.0"/></material>
-    <material name="Red"><color rgba="0.8 0.0 0.0 1.0"/></material>
-    <material name="Blue"><color rgba="0.0 0.0 1.0 1.0"/></material>
-    <material name="LightBlue"><color rgba="0.589 0.793 1.0 1.0"/></material>
-    <material name="Grey"><color rgba="0.5 0.5 0.5 1.0"/></material>
-    <material name="White"><color rgba="1.0 1.0 1.0 1.0"/></material>
-    
-
-    <xacro:macro name="inertial_block" params="mass length radius">
+    <!-- Tensor de inércia de paralelepípedo, COM em z=oz -->
+    <xacro:macro name="box_inertia" params="m x y z oz">
       <inertial>
-        <origin xyz="0 0 ${length/2}" rpy="0 0 0"/>
-        <mass value="${mass}"/>
+        <origin xyz="0 0 ${oz}" rpy="0 0 0"/>
+        <mass value="${m}"/>
         <inertia
-          ixx="${mass / 12.0 * (2*radius*2*radius + length*length)}" ixy="0.0" ixz="0.0"
-          iyy="${mass / 12.0 * (length*length + 2*radius*2*radius)}" iyz="0.0"
-          izz="${mass / 12.0 * (2*radius*2*radius + 2*radius*2*radius)}"/>
+          ixx="${(1.0/12.0)*m*(y*y + z*z)}" ixy="0.0" ixz="0.0"
+          iyy="${(1.0/12.0)*m*(x*x + z*z)}" iyz="0.0"
+          izz="${(1.0/12.0)*m*(x*x + y*y)}"/>
       </inertial>
     </xacro:macro>
 
-    <xacro:macro name="gazebo_grey_link_color_block" params="link_name">
-      <gazebo reference="${link_name}">
+    <!-- Elo barra: seção sec_x x sec_y, comprimento 'length' ao longo de +Z -->
+    <xacro:macro name="planar_link" params="name length m">
+      <link name="${name}">
         <visual>
-          <material>
-            <ambient>0.5 0.5 0.5 1.0</ambient>
-            <diffuse>0.56666695 0.56666695 0.56666695 1.0</diffuse>
-            <specular>0.6000003 0.6000003 0.6000003 1.0</specular>
-          </material>
+          <origin xyz="0 0 ${length/2}" rpy="0 0 0"/>
+          <geometry><box size="${sec_x} ${sec_y} ${length}"/></geometry>
+          <material name="pla"/>
         </visual>
-      </gazebo>
+        <collision>
+          <origin xyz="0 0 ${length/2}" rpy="0 0 0"/>
+          <geometry><box size="${sec_x} ${sec_y} ${length}"/></geometry>
+        </collision>
+        <xacro:box_inertia m="${m}" x="${sec_x}" y="${sec_y}" z="${length}" oz="${length/2}"/>
+      </link>
     </xacro:macro>
 
-    <xacro:macro name="gazebo_blue_link_color_block" params="link_name">
-      <gazebo reference="${link_name}">
-        <visual>
-          <material>
-            <ambient>0.589 0.793 1.0 1.0</ambient>
-            <diffuse>0.56666695 0.56666695 0.56666695 1.0</diffuse>
-            <specular>0.6000003 0.6000003 0.6000003 1.0</specular>
-          </material>
-        </visual>
-      </gazebo>
-    </xacro:macro>
 
-    <!-- Junta de montagem do braço no RAV -->
+    <!-- ===================== CADEIA ===================== -->
+
+    <!-- Montagem do braço no corpo do RAV -->
     <joint name="${prefix}mount_joint" type="fixed">
       <origin xyz="${xyz}" rpy="${rpy}"/>
       <parent link="${parent_link}"/>
-      <child link="${prefix}base_link"/>
+      <child  link="${prefix}base_link"/>
     </joint>
 
+    <!-- base_link: bracket de fixação -->
     <link name="${prefix}base_link">
-      <xacro:inertial_block mass="${mass_3/4.0}" length="${radius_3*2.0}" radius="${radius_3*1.6}"/>
-
       <visual>
-      <origin xyz="0 0 ${radius_3*1.6}" rpy="0 ${M_PI/2.0} 0"/>
-      <geometry>
-        <cylinder radius="${radius_3*1.6}" length="${radius_3*2.0}"/>
-      </geometry>
-      <material name="LightBlue"/>
-    </visual>
-
-    <collision>
-      <origin xyz="0 0 ${radius_3*1.6}" rpy="0 ${M_PI/2.0} 0"/>
-      <geometry>
-        <cylinder radius="${radius_3*1.6}" length="${radius_3*2.0}"/>
-      </geometry>
-    </collision>
+        <origin xyz="0 0 0.02" rpy="0 0 0"/>
+        <geometry><box size="0.06 0.06 0.04"/></geometry>
+        <material name="bracket"/>
+      </visual>
+      <collision>
+        <origin xyz="0 0 0.02" rpy="0 0 0"/>
+        <geometry><box size="0.06 0.06 0.04"/></geometry>
+      </collision>
+      <xacro:box_inertia m="${m_base}" x="0.06" y="0.06" z="0.04" oz="0.02"/>
     </link>
 
+    <!-- joint_2 = OMBRO (M1) -->
     <joint name="${prefix}joint_2" type="revolute">
-      <origin xyz="0 0 ${radius_3*1.6}" rpy="0 0 0"/>
+      <origin xyz="0 0 0.04" rpy="0 0 0"/>
       <parent link="${prefix}base_link"/>
-      <child link="${prefix}link_2"/>
+      <child  link="${prefix}link_2"/>
       <axis xyz="-1 0 0"/>
-      <limit lower="0.0" upper="${M_PI * 2}" effort="300.0" velocity="1.0"/>
+      <limit lower="${lim_lo}" upper="${lim_hi}" effort="${j_eff}" velocity="${j_vel}"/>
     </joint>
+    <xacro:planar_link name="${prefix}link_2" length="${L1}" m="${m_link2}"/>
 
-    <link name="${prefix}link_2">
-      <xacro:inertial_block mass="${mass_3}" length="${length_3}" radius="${radius_3}"/>
-      <visual>
-        <origin xyz="0 0 ${length_3/2.0}" rpy="0 0 0"/>
-        <geometry><cylinder radius="${radius_3}" length="${length_3}"/></geometry>
-        <material name="Grey"/>
-      </visual>
-      <collision>
-        <origin xyz="0 0 ${length_3/2.0}" rpy="0 0 0"/>
-        <geometry><cylinder radius="${radius_3}" length="${length_3}"/></geometry>
-      </collision>
-    </link>
-    <xacro:gazebo_grey_link_color_block link_name="${prefix}link_2"/>
-
-    <link name="${prefix}link_2_endlink">
-      <xacro:inertial_block mass="${mass_3/4.0}" length="${radius_3*2.0}" radius="${radius_3}"/>
-
-      <visual>
-        <origin xyz="0 0 ${radius_3}" rpy="0 0 0"/>
-        <geometry>
-          <cylinder radius="${radius_3*2}" length="${radius_3*2.0}"/>
-        </geometry>
-        <material name="LightBlue"/>
-      </visual>
-
-      <collision>
-        <origin xyz="0 0 ${radius_3}" rpy="0 0 0"/>
-        <geometry>
-          <cylinder radius="${radius_3*2}" length="${radius_3*2.0}"/>
-        </geometry>
-      </collision>
-    </link>
-
-    <joint name="${prefix}link_2_endjoint" type="fixed">
-      <origin xyz="${-radius_3} 0 ${length_3 - 0.01}" rpy="0 ${M_PI/2.0} 0"/>
-      <parent link="${prefix}link_2"/>
-      <child link="${prefix}link_2_endlink"/>
-    </joint>
-
-    <gazebo reference="${prefix}link_2_endjoint">
-      <disableFixedJointLumping>true</disableFixedJointLumping>
-      <preserveFixedJoint>true</preserveFixedJoint>
-    </gazebo>
-
+    <!-- joint_3 = COTOVELO (M2) -->
     <joint name="${prefix}joint_3" type="revolute">
-      <origin xyz="0 0 ${length_3}" rpy="0 0 0"/>
+      <origin xyz="0 0 ${L1}" rpy="0 0 0"/>
       <parent link="${prefix}link_2"/>
-      <child link="${prefix}link_3"/>
+      <child  link="${prefix}link_3"/>
       <axis xyz="-1 0 0"/>
-      <limit lower="4.0615" upper="6.2831" effort="300.0" velocity="1.0"/>
+      <limit lower="${lim_lo}" upper="${lim_hi}" effort="${j_eff}" velocity="${j_vel}"/>
     </joint>
+    <xacro:planar_link name="${prefix}link_3" length="${L2}" m="${m_link3}"/>
 
-    <link name="${prefix}link_3">
-      <xacro:inertial_block mass="${mass_4}" length="${length_4}" radius="${radius_4}"/>
-          <visual>
-      <origin xyz="0 0 ${(length_4 - radius_5*1.3)/2.0}" rpy="0 0 0"/>
-      <geometry>
-        <cylinder radius="${radius_4}" length="${length_4 - radius_5*1.3}"/>
-      </geometry>
-      <material name="Grey"/>
-    </visual>
-
-    <collision>
-      <origin xyz="0 0 ${(length_4 - radius_5*1.3)/2.0}" rpy="0 0 0"/>
-      <geometry>
-        <cylinder radius="${radius_4}" length="${length_4 - radius_5*1.3}"/>
-      </geometry>
-    </collision>
-    </link>
-    <xacro:gazebo_grey_link_color_block link_name="${prefix}link_3"/>
-
+    <!-- joint_4 = PUNHO (M3) -->
     <joint name="${prefix}joint_4" type="revolute">
-      <origin xyz="0 0 ${length_4}" rpy="0 0 0"/>
+      <origin xyz="0 0 ${L2}" rpy="0 0 0"/>
       <parent link="${prefix}link_3"/>
-      <child link="${prefix}link_4"/>
+      <child  link="${prefix}link_4"/>
       <axis xyz="1 0 0"/>
-      <limit lower="-${M_PI}" upper="${M_PI}" effort="300.0" velocity="1.0"/>
+      <limit lower="${lim_lo}" upper="${lim_hi}" effort="${j_eff}" velocity="${j_vel}"/>
     </joint>
+    <xacro:planar_link name="${prefix}link_4" length="${L3}" m="${m_link4}"/>
 
-    <link name="${prefix}link_4">
-      <xacro:inertial_block mass="${mass_5}" length="${length_5}" radius="${radius_5}"/>
 
-      <!-- Cilindro da junta 4 -->
-      <visual>
-        <origin xyz="0 0 0" rpy="0 ${M_PI/2.0} 0"/>
-        <geometry>
-          <cylinder radius="${radius_5*1.3}" length="${radius_5*2.0}"/>
-        </geometry>
-        <material name="LightBlue"/>
-      </visual>
-
-      <collision>
-        <origin xyz="0 0 0" rpy="0 ${M_PI/2.0} 0"/>
-        <geometry>
-          <cylinder radius="${radius_5*1.3}" length="${radius_5*2.0}"/>
-        </geometry>
-      </collision>
-
-      <!-- Retângulo apoiado no limite superior do cilindro -->
-      <visual>
-        <origin xyz="0 0 ${radius_5*2.3}" rpy="0 ${M_PI/2.0} 0"/>
-        <geometry>
-          <box size="${radius_5*2} ${radius_5*2} ${length_5}"/>
-        </geometry>
-        <material name="Grey"/>
-      </visual>
-
-      <collision>
-        <origin xyz="0 0 ${radius_5*2.3}" rpy="0 ${M_PI/2.0} 0"/>
-        <geometry>
-          <box size="${radius_5*2} ${radius_5*2} ${length_5}"/>
-        </geometry>
-      </collision>
-    </link>
-
+    <!-- ===================== GARRA (M4) - PLACEHOLDER ===================== -->
+    <!-- Garra de 2 dedos com mimic, mantida do modelo anterior so na ESTRUTURA
+         (nomes/grupos). Geometria é stub. Substituir quando o projeto da garra fechar. -->
     <joint name="${prefix}gripper_joint_1" type="prismatic">
-      <origin xyz="0 0 ${radius_5*2.3 + length_6/2.0}" rpy="0 0 0"/>
+      <origin xyz="0 ${sec_y/2 + 0.005} ${L3}" rpy="0 0 0"/>
       <parent link="${prefix}link_4"/>
-      <child link="${prefix}gripper_link_1"/>
-      <axis xyz="1 0 0"/>
-      <limit lower="0.0" upper="0.03" effort="100.0" velocity="1.0"/>
+      <child  link="${prefix}gripper_link_1"/>
+      <axis xyz="0 1 0"/>
+      <limit lower="0.0" upper="${grip_open}" effort="5.0" velocity="0.1"/>
     </joint>
 
     <joint name="${prefix}gripper_joint_2" type="prismatic">
-      <origin xyz="0 0 ${radius_5*2.3 + length_6/2.0}" rpy="0 0 0"/>
+      <origin xyz="0 ${-sec_y/2 - 0.005} ${L3}" rpy="0 0 0"/>
       <parent link="${prefix}link_4"/>
-      <child link="${prefix}gripper_link_2"/>
-      <axis xyz="-1 0 0"/>
-      <limit lower="0.0" upper="0.03" effort="100.0" velocity="1.0"/>
-
+      <child  link="${prefix}gripper_link_2"/>
+      <axis xyz="0 -1 0"/>
+      <limit lower="0.0" upper="${grip_open}" effort="5.0" velocity="0.1"/>
       <mimic joint="${prefix}gripper_joint_1" multiplier="1.0" offset="0.0"/>
     </joint>
 
-    <joint name="${prefix}gripper_frame_joint" type="fixed">
-      <origin xyz="0 0 ${radius_5*2.3 + length_6}" rpy="0 0 0"/>
-      <parent link="${prefix}link_4"/>
-      <child link="${prefix}gripper_frame_cp"/>
-    </joint>
-
     <link name="${prefix}gripper_link_1">
-      <xacro:inertial_block mass="${mass_6}" length="${length_6}" radius="${radius_6}"/>
       <visual>
-        <origin xyz="0 0 ${radius_6/2.0}" rpy="0 0 0"/>
-        <geometry><box size="${radius_6} ${radius_6*2} ${length_6}"/></geometry>
-        <material name="Grey"/>
+        <origin xyz="0 0 ${grip_len/2}" rpy="0 0 0"/>
+        <geometry><box size="0.01 0.01 ${grip_len}"/></geometry>
+        <material name="finger"/>
       </visual>
       <collision>
-        <origin xyz="0 0 ${radius_6/2.0}" rpy="0 0 0"/>
-        <geometry><box size="${radius_6*2} ${radius_6*2} ${length_6}"/></geometry>
+        <origin xyz="0 0 ${grip_len/2}" rpy="0 0 0"/>
+        <geometry><box size="0.01 0.01 ${grip_len}"/></geometry>
       </collision>
+      <xacro:box_inertia m="${m_finger}" x="0.01" y="0.01" z="${grip_len}" oz="${grip_len/2}"/>
     </link>
-    <xacro:gazebo_grey_link_color_block link_name="${prefix}gripper_link_1"/>
 
     <link name="${prefix}gripper_link_2">
-      <xacro:inertial_block mass="${mass_6}" length="${length_6}" radius="${radius_6}"/>
       <visual>
-        <origin xyz="0 0 ${radius_6/2.0}" rpy="0 0 0"/>
-        <geometry><box size="${radius_6} ${radius_6*2} ${length_6}"/></geometry>
-        <material name="Grey"/>
+        <origin xyz="0 0 ${grip_len/2}" rpy="0 0 0"/>
+        <geometry><box size="0.01 0.01 ${grip_len}"/></geometry>
+        <material name="finger"/>
       </visual>
       <collision>
-        <origin xyz="0 0 ${radius_6/2.0}" rpy="0 0 0"/>
-        <geometry><box size="${radius_6*2} ${radius_6*2} ${length_6}"/></geometry>
+        <origin xyz="0 0 ${grip_len/2}" rpy="0 0 0"/>
+        <geometry><box size="0.01 0.01 ${grip_len}"/></geometry>
       </collision>
-    </link>
-    <xacro:gazebo_grey_link_color_block link_name="${prefix}gripper_link_2"/>
-
-    <link name="${prefix}gripper_frame_cp">
-      <xacro:inertial_block mass="${0.001}" length="${0.001}" radius="${0.001}"/>
-      <visual>
-        <origin xyz="0 0 0" rpy="0 0 0"/>
-        <geometry><box size="${0.001} ${0.001} ${0.001}"/></geometry>
-        <material name="Grey"/>
-      </visual>
-      <collision>
-        <origin xyz="0 0 0" rpy="0 0 0"/>
-        <geometry><box size="${0.001} ${0.001} ${0.001}"/></geometry>
-      </collision>
+      <xacro:box_inertia m="${m_finger}" x="0.01" y="0.01" z="${grip_len}" oz="${grip_len/2}"/>
     </link>
 
+    <!-- TCP da garra (frame de referência para IK/MoveIt) -->
+    <link name="${prefix}gripper_frame_cp"/>
+    <joint name="${prefix}gripper_frame_joint" type="fixed">
+      <origin xyz="0 0 ${L3 + grip_len}" rpy="0 0 0"/>
+      <parent link="${prefix}link_4"/>
+      <child  link="${prefix}gripper_frame_cp"/>
+    </joint>
+
+
+    <!-- ===================== SIMULAÇÃO (Gazebo + ros2_control) ===================== -->
     <xacro:if value="$(arg use_sim)">
       <ros2_control name="${prefix}GazeboSystem" type="system">
         <hardware>
           <plugin>gazebo_ros2_control/GazeboSystem</plugin>
         </hardware>
-
         <joint name="${prefix}joint_2">
           <command_interface name="position"/>
           <state_interface name="position"/>
           <state_interface name="velocity"/>
         </joint>
-
         <joint name="${prefix}joint_3">
           <command_interface name="position"/>
           <state_interface name="position"/>
           <state_interface name="velocity"/>
         </joint>
-
         <joint name="${prefix}joint_4">
           <command_interface name="position"/>
           <state_interface name="position"/>
           <state_interface name="velocity"/>
         </joint>
-
         <joint name="${prefix}gripper_joint_1">
           <command_interface name="position"/>
           <state_interface name="position"/>
           <state_interface name="velocity"/>
         </joint>
-
         <joint name="${prefix}gripper_joint_2">
+          <param name="mimic">${prefix}gripper_joint_1</param>
+          <param name="multiplier">1.0</param>
           <command_interface name="position"/>
           <state_interface name="position"/>
           <state_interface name="velocity"/>

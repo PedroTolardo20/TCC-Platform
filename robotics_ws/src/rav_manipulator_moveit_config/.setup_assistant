@@ -1,0 +1,9 @@
+moveit_setup_assistant_config:
+  urdf:
+    package: rav_manipulator_moveit_config
+    relative_path: config/rav_manipulator.urdf.xacro
+  srdf:
+    relative_path: config/rav_manipulator.srdf
+  package_settings:
+    author_name: RAV TCC
+    author_email: nathanconconi24@gmail.com

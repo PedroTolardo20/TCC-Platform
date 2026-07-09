@@ -1,0 +1,46 @@
+# ros2_control configuration used first with mock_components/GenericSystem.
+# Keep the controller name and joint list unchanged when the real OpenCM
+# hardware interface replaces the mock backend.
+controller_manager:
+  ros__parameters:
+    update_rate: 100
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    arm_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+
+arm_controller:
+  ros__parameters:
+    joints:
+      - shoulder_joint
+      - elbow_joint
+      - wrist_joint
+
+    command_interfaces:
+      - position
+
+    state_interfaces:
+      - position
+      - velocity
+
+    state_publish_rate: 50.0
+    action_monitor_rate: 20.0
+
+    allow_partial_joints_goal: false
+    allow_nonzero_velocity_at_trajectory_end: false
+    open_loop_control: false
+
+    constraints:
+      stopped_velocity_tolerance: 0.01
+      goal_time: 0.0
+      shoulder_joint:
+        trajectory: 0.15
+        goal: 0.10
+      elbow_joint:
+        trajectory: 0.15
+        goal: 0.10
+      wrist_joint:
+        trajectory: 0.15
+        goal: 0.10

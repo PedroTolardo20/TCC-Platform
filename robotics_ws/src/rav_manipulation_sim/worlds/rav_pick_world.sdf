@@ -1,0 +1,108 @@
+<?xml version="1.0" ?>
+<sdf version="1.8">
+  <world name="default">
+    <gravity>0 0 -9.81</gravity>
+
+    <physics name="1ms" type="ignored">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+    </physics>
+
+    <!-- Sistemas mínimos do Gazebo Fortress: física, spawn e visualização. -->
+    <plugin
+      filename="ignition-gazebo-physics-system"
+      name="ignition::gazebo::systems::Physics"/>
+    <plugin
+      filename="ignition-gazebo-user-commands-system"
+      name="ignition::gazebo::systems::UserCommands"/>
+    <plugin
+      filename="ignition-gazebo-scene-broadcaster-system"
+      name="ignition::gazebo::systems::SceneBroadcaster"/>
+
+    <light name="sun" type="directional">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>100 100</size>
+            </plane>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>100 100</size>
+            </plane>
+          </geometry>
+          <material>
+            <ambient>0.35 0.35 0.35 1</ambient>
+            <diffuse>0.45 0.45 0.45 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Mesa: topo em z=0.80 m, mesma geometria usada na Planning Scene. -->
+    <model name="pick_table">
+      <static>true</static>
+      <pose>0.70 0.00 0.40 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.50 0.50 0.80</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.50 0.50 0.80</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.22 0.11 0.04 1</ambient>
+            <diffuse>0.46 0.26 0.10 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Produto azul: 5 x 5 x 8 cm, centro em z=0.84 m, topo em z=0.88 m. -->
+    <model name="blue_product">
+      <static>true</static>
+      <pose>0.55 0.00 0.84 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.05 0.05 0.08</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.05 0.05 0.08</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.02 0.10 0.70 1</ambient>
+            <diffuse>0.05 0.22 1.00 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+  </world>
+</sdf>
