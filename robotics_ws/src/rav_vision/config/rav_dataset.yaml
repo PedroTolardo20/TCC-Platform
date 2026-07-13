@@ -1,0 +1,14 @@
+# Dataset no formato Ultralytics YOLO.
+# Edite as classes em names antes do treinamento.
+# Estrutura esperada:
+# datasets/rav_dataset/
+#   images/train, images/val, images/test
+#   labels/train, labels/val, labels/test
+
+path: ../datasets/rav_dataset
+train: images/train
+val: images/val
+test: images/test
+
+names:
+  0: objeto

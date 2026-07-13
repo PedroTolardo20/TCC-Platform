@@ -1,0 +1,8 @@
+# Parametros recomendados para validacao.
+model: runs/rav_vision/train/yolo26_rav/weights/best.pt
+imgsz: 640
+batch: 8
+device: "0"
+split: val
+project: runs/rav_vision/val
+name: yolo26_rav_val

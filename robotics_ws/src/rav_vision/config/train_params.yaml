@@ -1,0 +1,11 @@
+# Parametros recomendados para o primeiro treino.
+# Estes valores tambem podem ser passados direto via argumentos do comando.
+model: yolo26n.pt
+epochs: 100
+imgsz: 640
+batch: 8
+device: "0"
+workers: 4
+patience: 50
+project: runs/rav_vision/train
+name: yolo26_rav

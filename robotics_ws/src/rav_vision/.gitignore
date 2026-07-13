@@ -1,0 +1,19 @@
+# VS Code
+.vscode/
+
+# Banco de dados do IntelliSense
+*.vc.db
+*.db-shm
+*.db-wal
+
+# Python
+__pycache__/
+*.pyc
+
+# Modelos
+*.pt
+
+# ROS logs
+log/
+build/
+install/
