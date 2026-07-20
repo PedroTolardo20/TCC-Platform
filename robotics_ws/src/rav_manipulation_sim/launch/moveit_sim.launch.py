@@ -31,21 +31,21 @@ def generate_launch_description():
     )
 
     semantic_file = (
-        sim_share
+        moveit_share
         / "config"
-        / "rav_gazebo.srdf"
+        / "rav_manipulator_sim.srdf"
     )
 
     kinematics_file = (
-        sim_share
+        moveit_share
         / "config"
-        / "rav_physics_kinematics.yaml"
+        / "kinematics_sim.yaml"
     )
 
     rviz_file = (
-        sim_share
+        moveit_share
         / "config"
-        / "rav_gazebo_moveit.rviz"
+        / "moveit_sim.rviz"
     )
 
     moveit_controllers_file = (
