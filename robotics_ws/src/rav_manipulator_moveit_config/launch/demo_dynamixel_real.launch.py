@@ -1,8 +1,7 @@
-"""MoveIt demo that executes through ros2_control mock hardware.
+"""MoveIt launch for the mounted RAV manipulator using real Dynamixel hardware.
 
-The only temporary part is the hardware plugin declared in the URDF
-(mock_components/GenericSystem).  MoveIt still talks to the same
-FollowJointTrajectory action that will be kept for OpenCM 485 EXP hardware.
+Starts ros2_control, the Dynamixel hardware interface, MoveIt and RViz.
+This launch communicates with and commands the physical motors.
 """
 
 import os
@@ -37,7 +36,7 @@ def generate_launch_description():
             "rav_manipulator",
             package_name="rav_manipulator_moveit_config",
         )
-        .robot_description(file_path="config/rav_manipulator_dynamixel_real_unmounted.urdf.xacro")
+        .robot_description(file_path="config/rav_manipulator_dynamixel_real.urdf.xacro")
         .planning_pipelines(
             default_planning_pipeline="ompl",
             pipelines=["ompl"],

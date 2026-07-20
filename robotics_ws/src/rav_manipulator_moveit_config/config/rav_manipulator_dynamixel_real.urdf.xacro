@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<!-- Standalone robot used by the MoveIt demo, with mock ros2_control hardware. -->
+<!-- Mounted RAV manipulator using the real Dynamixel ros2_control hardware. -->
 <robot name="rav_manipulator" xmlns:xacro="http://www.ros.org/wiki/xacro">
   <xacro:arg name="use_fake_hardware" default="true"/>
   <xacro:include filename="$(find rav_description)/urdf/rav_manipulator.urdf.xacro"/>
@@ -11,8 +11,8 @@
       mount_rpy="0 0 0"
       use_fake_hardware="false"/>
 
-  <!-- Plugin RAV em modo seguro: não abre serial nem movimenta motores. -->
-  <ros2_control name="RavManipuladorDynamixelRealUnmounted" type="system">
+  <!-- Hardware real: abre a porta serial e habilita os motores Dynamixel. -->
+  <ros2_control name="RavManipulatorDynamixelReal" type="system">
     <hardware>
       <plugin>rav_dynamixel_hardware/RavDynamixelHardware</plugin>
       <param name="dry_run">false</param>
