@@ -1,27 +1,42 @@
 <?xml version="1.0"?>
 <package format="3">
   <name>rav_manipulation_sim</name>
-  <version>0.0.1</version>
-  <description>Mock vision to MoveIt pipeline for the RAV manipulator in Gazebo.</description>
-  <maintainer email="nathan@example.com">Nathan</maintainer>
+  <version>0.1.0</version>
+
+  <description>
+    Gazebo simulation, RGB-D camera and test world for the RAV manipulator.
+  </description>
+
+  <maintainer email="nathanconconi24@gmail.com">
+    Nathan Conconi
+  </maintainer>
+
   <license>MIT</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
-  <depend>rclcpp</depend>
-  <depend>geometry_msgs</depend>
-  <depend>shape_msgs</depend>
-  <depend>tf2</depend>
-  <depend>tf2_ros</depend>
-  <depend>tf2_geometry_msgs</depend>
-  <depend>moveit_msgs</depend>
-  <depend>moveit_ros_planning_interface</depend>
+  <exec_depend>ament_index_python</exec_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
 
-  <exec_depend>rav_physics_sim</exec_depend>
-  <exec_depend>rav_manipulator_moveit_config</exec_depend>
+  <exec_depend>controller_manager</exec_depend>
+  <exec_depend>robot_state_publisher</exec_depend>
+  <exec_depend>xacro</exec_depend>
+
   <exec_depend>ros_gz_sim</exec_depend>
-  <exec_depend>moveit_ros_move_group</exec_depend>
+  <exec_depend>ros_gz_bridge</exec_depend>
+  <exec_depend>gz_ros2_control</exec_depend>
+
+  <exec_depend>rosgraph_msgs</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+
   <exec_depend>moveit_configs_utils</exec_depend>
+  <exec_depend>moveit_ros_move_group</exec_depend>
+  <exec_depend>rviz2</exec_depend>
+
+  <exec_depend>rav_description</exec_depend>
+  <exec_depend>rav_manipulator_moveit_config</exec_depend>
 
   <export>
     <build_type>ament_cmake</build_type>
