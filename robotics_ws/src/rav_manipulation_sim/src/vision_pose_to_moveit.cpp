@@ -27,7 +27,13 @@ public:
     group_name_ = declare_parameter<std::string>("group_name", "rav_arm");
     tcp_link_ = declare_parameter<std::string>("tcp_link", "gripper_mount");
     object_topic_ = declare_parameter<std::string>(
-      "object_topic", "/vision/object_pose");
+      "object_topic", "/rav_vision/target_pose");
+    approach_offset_z_ = declare_parameter<double>(
+      "approach_offset_z", 0.10);
+    execute_motion_ = declare_parameter<bool>(
+      "execute_motion", false);
+    one_shot_ = declare_parameter<bool>(
+      "one_shot", true);
     planning_time_ = declare_parameter<double>("planning_time", 5.0);
     position_tolerance_ = declare_parameter<double>("position_tolerance", 0.015);
     velocity_scale_ = declare_parameter<double>("velocity_scale", 0.20);
@@ -97,8 +103,14 @@ private:
 
   void on_object_pose(const geometry_msgs::msg::PoseStamped::SharedPtr message)
   {
+    if (one_shot_ && target_consumed_.exchange(true)) {
+      return;
+    }
+
     if (busy_.exchange(true)) {
-      RCLCPP_WARN(get_logger(), "A target is already being processed; ignoring duplicate detection.");
+      RCLCPP_WARN(
+        get_logger(),
+        "A target is already being processed; ignoring duplicate detection.");
       return;
     }
 
@@ -141,16 +153,30 @@ private:
       return;
     }
 
+    const auto detected_position = target.pose.position;
+
+    // Cria um alvo de aproximação acima do ponto detectado.
+    // O offset é aplicado depois da transformação para o planning frame,
+    // portanto representa a vertical do mundo.
+    target.pose.position.z += approach_offset_z_;
+
     RCLCPP_INFO(
       get_logger(),
-      "Object target in %s: x=%.3f, y=%.3f, z=%.3f.",
+      "Detected target in %s: x=%.3f, y=%.3f, z=%.3f.",
       planning_frame_.c_str(),
+      detected_position.x,
+      detected_position.y,
+      detected_position.z);
+
+    RCLCPP_INFO(
+      get_logger(),
+      "Safe approach target: x=%.3f, y=%.3f, z=%.3f "
+      "(offset_z=%.3f m).",
       target.pose.position.x,
       target.pose.position.y,
-      target.pose.position.z);
+      target.pose.position.z,
+      approach_offset_z_);
 
-    // No fixed 'pre_grasp' state is used. The supplied coordinate is the
-    // dynamic TCP target produced by perception / grasp logic.
     move_group_->setStartStateToCurrentState();
     move_group_->clearPoseTargets();
     move_group_->setPositionTarget(
@@ -168,7 +194,18 @@ private:
       return;
     }
 
-    RCLCPP_INFO(get_logger(), "Plan found. Executing through arm_controller.");
+    if (!execute_motion_) {
+      RCLCPP_INFO(
+        get_logger(),
+        "Plan found successfully. Execution is disabled for this test.");
+      move_group_->clearPoseTargets();
+      return;
+    }
+
+    RCLCPP_WARN(
+      get_logger(),
+      "Plan found. Executing through arm_controller.");
+
     const auto executed = move_group_->execute(plan);
 
     if (executed == moveit::core::MoveItErrorCode::SUCCESS) {
@@ -184,6 +221,9 @@ private:
   std::string tcp_link_;
   std::string object_topic_;
   std::string planning_frame_;
+  double approach_offset_z_{};
+  bool execute_motion_{};
+  bool one_shot_{};
   double planning_time_{};
   double position_tolerance_{};
   double velocity_scale_{};
@@ -195,6 +235,7 @@ private:
   std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr subscription_;
   std::atomic_bool busy_{false};
+  std::atomic_bool target_consumed_{false};
 };
 
 int main(int argc, char ** argv)

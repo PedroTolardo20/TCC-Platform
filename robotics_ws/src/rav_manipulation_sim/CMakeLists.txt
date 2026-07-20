@@ -40,7 +40,7 @@ install(TARGETS
 )
 
 install(
-  DIRECTORY launch config models worlds
+  DIRECTORY launch config models worlds urdf materials
   DESTINATION share/${PROJECT_NAME}
 )
 

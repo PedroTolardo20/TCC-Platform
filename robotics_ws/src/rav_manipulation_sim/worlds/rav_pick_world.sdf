@@ -19,6 +19,14 @@
       filename="ignition-gazebo-scene-broadcaster-system"
       name="ignition::gazebo::systems::SceneBroadcaster"/>
 
+
+    <!-- Necessário para câmeras, depth cameras e demais sensores. -->
+    <plugin
+      filename="ignition-gazebo-sensors-system"
+      name="ignition::gazebo::systems::Sensors">
+      <render_engine>ogre2</render_engine>
+    </plugin>
+
     <light name="sun" type="directional">
       <cast_shadows>true</cast_shadows>
       <pose>0 0 10 0 0 0</pose>
@@ -82,26 +90,62 @@
     <!-- Produto azul: 5 x 5 x 8 cm, centro em z=0.84 m, topo em z=0.88 m. -->
     <model name="blue_product">
       <static>true</static>
-      <pose>0.55 0.00 0.84 0 0 0</pose>
+      <pose>0.55 0.00 0.86 0 0 0</pose>
       <link name="link">
         <collision name="collision">
           <geometry>
             <box>
-              <size>0.05 0.05 0.08</size>
+              <size>0.05 0.045 0.12</size>
             </box>
           </geometry>
         </collision>
         <visual name="visual">
           <geometry>
             <box>
-              <size>0.05 0.05 0.08</size>
+              <size>0.05 0.045 0.12</size>
             </box>
           </geometry>
           <material>
-            <ambient>0.02 0.10 0.70 1</ambient>
-            <diffuse>0.05 0.22 1.00 1</diffuse>
+            <ambient>0.90 0.90 0.90 1</ambient>
+            <diffuse>0.98 0.98 0.98 1</diffuse>
+            <specular>0.20 0.20 0.20 1</specular>
           </material>
         </visual>
+
+        <!--
+          Imagem frontal da embalagem usada no treinamento.
+          É uma camada visual fina; a colisão continua sendo a caixa original.
+        -->
+        <visual name="bepantol_label_visual">
+          <!-- Face da caixa voltada para a câmera. -->
+          <pose>-0.0256 0 0 0 0 0</pose>
+
+          <geometry>
+            <box>
+              <!--
+                Espessura mínima, largura proporcional à imagem
+                e altura próxima à altura total da embalagem.
+              -->
+              <size>0.0008 0.042 0.116</size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>1 1 1 1</ambient>
+            <diffuse>1 1 1 1</diffuse>
+
+            <pbr>
+              <metal>
+                <albedo_map>
+                  model://rav_manipulation_sim/materials/textures/bepantol_front_texture.png
+                </albedo_map>
+                <metalness>0.0</metalness>
+                <roughness>0.8</roughness>
+              </metal>
+            </pbr>
+          </material>
+        </visual>
+
       </link>
     </model>
   </world>

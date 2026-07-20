@@ -17,6 +17,24 @@
 -->
 <robot name="rav_manipulator" xmlns:xacro="http://www.ros.org/wiki/xacro">
 
+  <!--
+    Propriedades físicas provisórias para Gazebo.
+    Não interferem no controle dos Dynamixel reais.
+    Substituir futuramente por massas e tensores medidos/calculados.
+  -->
+  <xacro:macro
+      name="rav_provisional_inertial"
+      params="mass xyz ixx iyy izz">
+    <inertial>
+      <origin xyz="${xyz}" rpy="0 0 0"/>
+      <mass value="${mass}"/>
+      <inertia
+          ixx="${ixx}" ixy="0.0" ixz="0.0"
+          iyy="${iyy}" iyz="0.0"
+          izz="${izz}"/>
+    </inertial>
+  </xacro:macro>
+
   <xacro:macro name="rav_manipulator"
                params="parent_link mount_xyz:='0 0 0' mount_rpy:='0 0 0' use_fake_hardware:=false">
 
@@ -64,6 +82,10 @@
       O origin abaixo leva o centro do horn do STL para a origem do link.
     -->
     <link name="manipulator_base_link">
+      <xacro:rav_provisional_inertial
+          mass="1.0"
+          xyz="0 0 0"
+          ixx="0.004" iyy="0.004" izz="0.004"/>
       <visual>
         <origin xyz="0 0.047471563258 -0.733684638388" rpy="0 0 0"/>
         <geometry>
@@ -96,6 +118,10 @@
       U aço 1 + Link 1 + carcaça fixa do Dynamixel 2.
     -->
     <link name="shoulder_link">
+      <xacro:rav_provisional_inertial
+          mass="1.5"
+          xyz="0 0.000015 0.139059"
+          ixx="0.010" iyy="0.010" izz="0.002"/>
       <visual>
         <origin xyz="0 0.047471563258 -0.733684638388" rpy="0 0 0"/>
         <geometry>
@@ -145,6 +171,10 @@
       U aço 2 + Link 2 + carcaça fixa do Dynamixel 3.
     -->
     <link name="elbow_link">
+      <xacro:rav_provisional_inertial
+          mass="1.2"
+          xyz="0 -0.171515 0"
+          ixx="0.012" iyy="0.002" izz="0.012"/>
       <visual>
         <origin xyz="0 0.047441923275 -1.011802711307" rpy="0 0 0"/>
         <geometry>
@@ -196,6 +226,10 @@
 
     <!-- U aço 3, onde o Dynamixel 4 será fixado quando a garra entrar. -->
     <link name="wrist_link">
+      <xacro:rav_provisional_inertial
+          mass="0.8"
+          xyz="0 0 0"
+          ixx="0.004" iyy="0.004" izz="0.004"/>
       <visual>
         <origin xyz="0 0.390472110866 -1.011787152338" rpy="0 0 0"/>
         <geometry>
@@ -241,6 +275,29 @@
         </geometry>
       </collision>
     </link>
+
+
+    <!--
+      Ponto terminal provisório do terceiro elo.
+      Não representa uma garra; representa a ponta física usada nos testes
+      de alcance do manipulador sem gripper.
+    -->
+    <link name="wrist_tip">
+      <visual>
+        <geometry>
+          <sphere radius="0.015"/>
+        </geometry>
+        <material name="wrist_tip_material">
+          <color rgba="1.0 0.0 0.0 1.0"/>
+        </material>
+      </visual>
+    </link>
+
+    <joint name="wrist_tip_joint" type="fixed">
+      <parent link="wrist_link"/>
+      <child link="wrist_tip"/>
+      <origin xyz="0 -0.120 0" rpy="0 0 0"/>
+    </joint>
 
     <!-- Frame neutro para a futura garra. A posição final ainda não foi presumida. -->
     <link name="gripper_mount"/>

@@ -7,3 +7,15 @@ __pycache__/
 **/.vscode/browse.vc.db
 .vscode/
 **/.vscode/
+
+# ROS 2 / colcon
+# Python
+*.pyo
+.pytest_cache/
+# Editores e sistema
+.idea/
+*~
+# Backups temporários criados durante os testes
+*.bak
+*.backup
+*.before_*

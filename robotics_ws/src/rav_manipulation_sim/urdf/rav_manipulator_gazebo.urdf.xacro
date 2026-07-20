@@ -1,0 +1,269 @@
+<?xml version="1.0"?>
+
+<robot name="rav_manipulator"
+       xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!-- Geometria e cinemática canônicas do manipulador atual. -->
+  <xacro:include
+      filename="$(find rav_description)/urdf/rav_manipulator.urdf.xacro"/>
+
+  <!--
+    Link raiz da simulação.
+    A macro cria uma junta fixa entre este link e manipulator_base_link.
+  -->
+  <link name="world"/>
+
+  <xacro:rav_manipulator
+      parent_link="world"
+      mount_xyz="0.070 0.000 0.730"
+      mount_rpy="0 0 1.57079632679"
+      use_fake_hardware="false"/>
+
+
+  <!--
+    Gazebo: fixa a base ao mundo e desativa gravidade nesta primeira
+    validação cinemática. A gravidade será reativada depois de criarmos
+    colisões simplificadas e massas físicas melhores.
+  -->
+  <gazebo reference="rav_manipulator_mount_joint">
+    <preserveFixedJoint>true</preserveFixedJoint>
+  </gazebo>
+
+  <gazebo reference="manipulator_base_link">
+    <gravity>false</gravity>
+    <self_collide>false</self_collide>
+  </gazebo>
+
+  <gazebo reference="shoulder_link">
+    <gravity>false</gravity>
+    <self_collide>false</self_collide>
+  </gazebo>
+
+  <gazebo reference="elbow_link">
+    <gravity>false</gravity>
+    <self_collide>false</self_collide>
+  </gazebo>
+
+  <gazebo reference="wrist_link">
+    <gravity>false</gravity>
+    <self_collide>false</self_collide>
+  </gazebo>
+
+
+  <!--
+    Câmera RGB-D provisória, presa ao Link 2 próximo ao Dynamixel 3.
+
+    Referência mecânica provisória:
+      x = eixo lateral das juntas
+      y = direção longitudinal do Link 2
+      z = altura em relação ao Link 2
+
+    Em ready, a câmera deve ficar aproximadamente sobre o objeto.
+    A posição será substituída pelas medidas finais do suporte em CAD.
+  -->
+
+  <material name="camera_body_material">
+    <color rgba="0.08 0.08 0.10 1.0"/>
+  </material>
+
+  <material name="camera_lens_material">
+    <color rgba="0.05 0.20 0.85 1.0"/>
+  </material>
+
+  <link name="camera_link">
+    <visual name="camera_body_visual">
+      <geometry>
+        <box size="0.045 0.060 0.030"/>
+      </geometry>
+      <material name="camera_body_material"/>
+    </visual>
+
+    <!-- Marcador da direção frontal da câmera: +X de camera_link. -->
+    <visual name="camera_lens_visual">
+      <origin xyz="0.028 0 0" rpy="0 1.57079632679 0"/>
+      <geometry>
+        <cylinder radius="0.009" length="0.012"/>
+      </geometry>
+      <material name="camera_lens_material"/>
+    </visual>
+
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="0.080"/>
+      <inertia
+          ixx="0.000030" ixy="0" ixz="0"
+          iyy="0.000020" iyz="0"
+          izz="0.000035"/>
+    </inertial>
+  </link>
+
+  <!--
+    Posição provisória:
+    - 30 cm depois do elbow_joint, próximo ao Dynamixel 3;
+    - 7 cm acima do Link 2;
+    - +X da câmera apontando para -Z do elbow_link.
+  -->
+  <joint name="camera_mount_joint" type="fixed">
+    <parent link="elbow_link"/>
+    <child link="camera_link"/>
+    <origin
+        xyz="0 -0.300 0.070"
+        rpy="0 0.500 -1.670"/>
+  </joint>
+
+  <!--
+    Frame óptico:
+      +Z para frente
+      +X para a direita da imagem
+      +Y para baixo na imagem
+  -->
+  <link name="camera_color_optical_frame"/>
+
+  <joint name="camera_color_optical_joint" type="fixed">
+    <parent link="camera_link"/>
+    <child link="camera_color_optical_frame"/>
+    <origin
+        xyz="0.034 0 0"
+        rpy="-1.57079632679 0 -1.57079632679"/>
+  </joint>
+
+  <gazebo reference="camera_mount_joint">
+    <preserveFixedJoint>true</preserveFixedJoint>
+  </gazebo>
+
+  <gazebo reference="camera_color_optical_joint">
+    <preserveFixedJoint>true</preserveFixedJoint>
+  </gazebo>
+
+
+  <!--
+    Sensor RGB-D simulado.
+
+    O sensor do Gazebo observa ao longo do eixo +X de camera_link.
+    O frame óptico ROS foi definido anteriormente com +Z para frente.
+  -->
+  <gazebo reference="camera_link">
+    <sensor name="rav_rgbd_camera" type="rgbd_camera">
+      <gz_frame_id>camera_color_optical_frame</gz_frame_id>
+
+      <!-- Centro da lente em relação a camera_link. -->
+      <pose>0.034 0 0 0 0 0</pose>
+
+      <always_on>true</always_on>
+      <update_rate>15</update_rate>
+      <visualize>true</visualize>
+
+      <!--
+        O Gazebo gera:
+          /camera/image
+          /camera/depth_image
+          /camera/camera_info
+      -->
+      <topic>/camera</topic>
+
+      <camera>
+        <horizontal_fov>1.0471975512</horizontal_fov>
+
+        <!--
+          Intrínsecos explícitos para imagem 640x480 e HFOV de 60 graus.
+          Evita os valores padrão 277/160/120 do SDF.
+        -->
+        <lens>
+          <intrinsics>
+            <fx>554.2563</fx>
+            <fy>554.2563</fy>
+            <cx>320.0</cx>
+            <cy>240.0</cy>
+            <s>0.0</s>
+          </intrinsics>
+
+          <projection>
+            <p_fx>554.2563</p_fx>
+            <p_fy>554.2563</p_fy>
+            <p_cx>320.0</p_cx>
+            <p_cy>240.0</p_cy>
+            <tx>0.0</tx>
+            <ty>0.0</ty>
+          </projection>
+        </lens>
+
+        <image>
+          <width>640</width>
+          <height>480</height>
+          <format>R8G8B8</format>
+        </image>
+
+        <clip>
+          <near>0.10</near>
+          <far>3.00</far>
+        </clip>
+      </camera>
+
+      <depth_camera>
+        <clip>
+          <near>0.10</near>
+          <far>3.00</far>
+        </clip>
+      </depth_camera>
+    </sensor>
+  </gazebo>
+
+
+  <!-- Marcador visual da ponta utilizada pela cinemática 3R. -->
+  <gazebo reference="wrist_tip">
+    <material>Gazebo/Red</material>
+  </gazebo>
+
+  <!-- ros2_control conectado ao Gazebo Fortress. -->
+  <ros2_control name="RavManipulatorGazeboSystem" type="system">
+    <hardware>
+      <plugin>gz_ros2_control/GazeboSimSystem</plugin>
+    </hardware>
+
+    <joint name="shoulder_joint">
+      <command_interface name="position"/>
+
+      <state_interface name="position">
+        <param name="initial_value">-0.4200</param>
+      </state_interface>
+
+      <state_interface name="velocity"/>
+    </joint>
+
+    <joint name="elbow_joint">
+      <command_interface name="position"/>
+
+      <state_interface name="position">
+        <param name="initial_value">1.1800</param>
+      </state_interface>
+
+      <state_interface name="velocity"/>
+    </joint>
+
+    <joint name="wrist_joint">
+      <command_interface name="position"/>
+
+      <state_interface name="position">
+        <param name="initial_value">0.8240</param>
+      </state_interface>
+
+      <state_interface name="velocity"/>
+    </joint>
+  </ros2_control>
+
+  <!--
+    Carrega o controller_manager dentro do Gazebo.
+    Reutiliza o mesmo arm_controller já validado no dry-run e no robô real.
+  -->
+  <gazebo>
+    <plugin
+        filename="gz_ros2_control-system"
+        name="gz_ros2_control::GazeboSimROS2ControlPlugin">
+
+      <parameters>
+        $(find rav_manipulator_moveit_config)/config/ros2_controllers.yaml
+      </parameters>
+    </plugin>
+  </gazebo>
+
+</robot>
