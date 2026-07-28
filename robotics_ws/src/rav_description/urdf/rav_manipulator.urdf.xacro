@@ -49,8 +49,8 @@
       da montagem exportada.
     -->
     <xacro:property name="j1_to_j2_y" value="0.000029639983"/>
-    <xacro:property name="j1_to_j2_z" value="0.278118072919"/>
-    <xacro:property name="j2_to_j3_y" value="-0.343030187591"/>
+    <xacro:property name="j1_to_j2_z" value="0.289118072919"/>
+    <xacro:property name="j2_to_j3_y" value="-0.334030187591"/>
     <xacro:property name="j2_to_j3_z" value="-0.000015558969"/>
 
     <!-- Limites provisórios: somente para RViz/MoveIt sem hardware real. -->
@@ -140,7 +140,7 @@
 
       <!-- Corpo do Dynamixel 2, fixo no Link 1. -->
       <visual>
-        <origin xyz="0 0.047501203241 -0.455566565469" rpy="0 0 0"/>
+        <origin xyz="0 0.047501203241 -0.444566565469" rpy="0 0 0"/>
         <geometry>
           <mesh filename="package://rav_description/meshes/manipulator/dynamixel_xm540.stl"
                 scale="0.001 0.001 0.001"/>
@@ -148,7 +148,7 @@
         <material name="rav_manipulator_motor"/>
       </visual>
       <collision>
-        <origin xyz="0 0.047501203241 -0.455566565469" rpy="0 0 0"/>
+        <origin xyz="0 0.047501203241 -0.444566565469" rpy="0 0 0"/>
         <geometry>
           <mesh filename="package://rav_description/meshes/manipulator/dynamixel_xm540.stl"
                 scale="0.001 0.001 0.001"/>
@@ -198,7 +198,7 @@
         Link 2, mantendo o centro do horn exatamente em J3.
       -->
       <visual>
-        <origin xyz="0 0.390654450797 0.047456004289" rpy="1.57079632679 0 0"/>
+        <origin xyz="0 0.399654450797 0.047456004289" rpy="1.57079632679 0 0"/>
         <geometry>
           <mesh filename="package://rav_description/meshes/manipulator/dynamixel_xm540.stl"
                 scale="0.001 0.001 0.001"/>
@@ -206,7 +206,7 @@
         <material name="rav_manipulator_motor"/>
       </visual>
       <collision>
-        <origin xyz="0 0.390654450797 0.047456004289" rpy="1.57079632679 0 0"/>
+        <origin xyz="0 0.399654450797 0.047456004289" rpy="1.57079632679 0 0"/>
         <geometry>
           <mesh filename="package://rav_description/meshes/manipulator/dynamixel_xm540.stl"
                 scale="0.001 0.001 0.001"/>
