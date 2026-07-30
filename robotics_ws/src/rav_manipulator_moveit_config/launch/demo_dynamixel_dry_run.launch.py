@@ -1,11 +1,7 @@
-"""MoveIt demo that executes through ros2_control mock hardware.
+"""MoveIt launch for the RAV manipulator using safe dry-run hardware."""
 
-The only temporary part is the hardware plugin declared in the URDF
-(mock_components/GenericSystem).  MoveIt still talks to the same
-FollowJointTrajectory action that will be kept for OpenCM 485 EXP hardware.
-"""
+from pathlib import Path
 
-import os
 import yaml
 
 from ament_index_python.packages import get_package_share_directory
@@ -22,22 +18,47 @@ def load_yaml(path):
 
 
 def generate_launch_description():
-    package_share = get_package_share_directory("rav_manipulator_moveit_config")
+    package_share = Path(
+        get_package_share_directory("rav_manipulator_moveit_config")
+    )
+    description_share = Path(
+        get_package_share_directory("rav_description")
+    )
 
-    ros2_controllers_path = os.path.join(
-        package_share, "config", "ros2_controllers.yaml"
+    robot_xacro = (
+        description_share
+        / "urdf"
+        / "rav_manipulator.urdf.xacro"
     )
-    moveit_controllers_path = os.path.join(
-        package_share, "config", "moveit_controllers.yaml"
+
+    ros2_controllers_path = (
+        package_share
+        / "config"
+        / "ros2_controllers.yaml"
     )
-    rviz_config = os.path.join(package_share, "config", "moveit.rviz")
+    moveit_controllers_path = (
+        package_share
+        / "config"
+        / "moveit_controllers.yaml"
+    )
+    rviz_config = (
+        package_share
+        / "config"
+        / "moveit.rviz"
+    )
 
     moveit_config = (
         MoveItConfigsBuilder(
             "rav_manipulator",
             package_name="rav_manipulator_moveit_config",
         )
-        .robot_description(file_path="config/rav_manipulator_dynamixel_dry_run.urdf.xacro")
+        .robot_description(
+            file_path=str(robot_xacro),
+            mappings={
+                "standalone": "true",
+                "hardware_mode": "dry_run",
+            },
+        )
         .planning_pipelines(
             default_planning_pipeline="ompl",
             pipelines=["ompl"],
@@ -54,23 +75,19 @@ def generate_launch_description():
         .to_moveit_configs()
     )
 
-    # MoveIt controller routing: MoveIt --> FollowJointTrajectory action of
-    # /arm_controller.  The action remains unchanged on real OpenCM hardware.
     moveit_controllers = {
         "moveit_controller_manager": (
-            "moveit_simple_controller_manager/MoveItSimpleControllerManager"
+            "moveit_simple_controller_manager/"
+            "MoveItSimpleControllerManager"
         ),
-        "moveit_simple_controller_manager": load_yaml(moveit_controllers_path),
+        "moveit_simple_controller_manager": load_yaml(
+            moveit_controllers_path
+        ),
     }
 
     trajectory_execution = {
         "moveit_manage_controllers": False,
-
-        # Temporário para validar a integração MoveIt -> ros2_control.
-        # No hardware real voltaremos a habilitar o monitoramento,
-        # com tempos e tolerâncias calibrados.
         "trajectory_execution.execution_duration_monitoring": False,
-
         "trajectory_execution.allowed_execution_duration_scaling": 10.0,
         "trajectory_execution.allowed_goal_duration_margin": 5.0,
         "trajectory_execution.allowed_start_tolerance": 0.05,
@@ -99,7 +116,10 @@ def generate_launch_description():
         package="controller_manager",
         executable="ros2_control_node",
         output="screen",
-        parameters=[moveit_config.robot_description, ros2_controllers_path],
+        parameters=[
+            moveit_config.robot_description,
+            str(ros2_controllers_path),
+        ],
     )
 
     joint_state_broadcaster_spawner = Node(
@@ -108,8 +128,10 @@ def generate_launch_description():
         output="screen",
         arguments=[
             "joint_state_broadcaster",
-            "--controller-manager", "/controller_manager",
-            "--controller-manager-timeout", "60",
+            "--controller-manager",
+            "/controller_manager",
+            "--controller-manager-timeout",
+            "60",
         ],
     )
 
@@ -119,8 +141,10 @@ def generate_launch_description():
         output="screen",
         arguments=[
             "arm_controller",
-            "--controller-manager", "/controller_manager",
-            "--controller-manager-timeout", "60",
+            "--controller-manager",
+            "/controller_manager",
+            "--controller-manager-timeout",
+            "60",
         ],
     )
 
@@ -135,14 +159,11 @@ def generate_launch_description():
         ],
     )
 
-    # Keep RViz free of joint-limit overrides.  On this Humble installation,
-    # passing that map to RViz causes a type conflict even though move_group
-    # itself accepts the same planning configuration.
     rviz = Node(
         package="rviz2",
         executable="rviz2",
         output="screen",
-        arguments=["-d", rviz_config],
+        arguments=["-d", str(rviz_config)],
         parameters=[
             moveit_config.robot_description,
             moveit_config.robot_description_semantic,

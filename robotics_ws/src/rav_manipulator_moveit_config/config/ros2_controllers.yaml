@@ -17,6 +17,7 @@ arm_controller:
       - shoulder_joint
       - elbow_joint
       - wrist_joint
+      - gripper_pinion_joint
 
     command_interfaces:
       - position
@@ -44,3 +45,8 @@ arm_controller:
       wrist_joint:
         trajectory: 0.15
         goal: 0.10
+      # Tolerância proporcional: gripper_pinion_joint tem curso total
+      # de ~2.536 rad, ~81% do curso dos joints do braço (pi rad).
+      gripper_pinion_joint:
+        trajectory: 0.12
+        goal: 0.08

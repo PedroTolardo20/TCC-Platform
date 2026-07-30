@@ -1,5 +1,5 @@
 default_velocity_scaling_factor: 0.3
-default_acceleration_scaling_factor: 0.2
+default_acceleration_scaling_factor: 0.3
 
 joint_limits:
   shoulder_joint:
@@ -15,6 +15,16 @@ joint_limits:
     max_acceleration: 1.0
 
   wrist_joint:
+    has_velocity_limits: true
+    max_velocity: 1.0
+    has_acceleration_limits: true
+    max_acceleration: 1.0
+
+  # Igualado ao braço: sem isso, gripper_pinion_joint usa o limite cru
+  # do URDF (0.50 rad/s, metade do braço) e vira gargalo sempre que
+  # participa do trajeto, arrastando o resto do movimento pro ritmo
+  # dela mesmo com o slider de velocidade/aceleração do RViz alto.
+  gripper_pinion_joint:
     has_velocity_limits: true
     max_velocity: 1.0
     has_acceleration_limits: true

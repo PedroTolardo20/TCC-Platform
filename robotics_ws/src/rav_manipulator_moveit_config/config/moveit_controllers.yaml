@@ -12,3 +12,4 @@ arm_controller:
     - shoulder_joint
     - elbow_joint
     - wrist_joint
+    - gripper_pinion_joint

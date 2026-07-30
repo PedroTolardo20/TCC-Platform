@@ -1,27 +1,25 @@
 <?xml version="1.0"?>
 <!--
-  Modelo do manipulador do TCC do RAV.
+  Modelo canônico único do manipulador RAV.
 
-  Escopo desta primeira etapa
-  - 3 juntas revolutas: shoulder_joint, elbow_joint e wrist_joint.
-  - Os três eixos são paralelos e usam +X como eixo de rotação.
-  - As meshes são as STLs originais exportadas do Shapr3D.
-  - A garra e o Dynamixel 4 permanecem fora deste arquivo até o CAD da garra
-    e o frame final de montagem serem definidos.
+  Uso:
+  - dry-run: standalone:=true hardware_mode:=dry_run
+  - real:    standalone:=true hardware_mode:=real
+  - inclusão em outro Xacro: standalone permanece false
 
-  Observação sobre o horn
-  O STL recebido do Dynamixel contém a carcaça e o horn como um único corpo.
-  No URDF, o centro do horn é a origem cinemática da junta. Visualmente, o
-  horn permanece junto com o corpo do motor porque não existe uma mesh separada
-  para ele; isso não altera a cinemática do braço.
+  O Dynamixel 4 aciona um pinhão (gripper_pinion_joint, revoluto) que
+  engrena em duas cremalheiras (left_finger_joint/right_finger_joint,
+  prismáticas, mimic do pinhão). Isso é modelado e comandado em todos
+  os modos, inclusive real (Dynamixel ID 4, calibrado no wizard).
 -->
 <robot name="rav_manipulator" xmlns:xacro="http://www.ros.org/wiki/xacro">
 
-  <!--
-    Propriedades físicas provisórias para Gazebo.
-    Não interferem no controle dos Dynamixel reais.
-    Substituir futuramente por massas e tensores medidos/calculados.
-  -->
+  <xacro:arg name="standalone" default="false"/>
+  <xacro:arg name="hardware_mode" default="dry_run"/>
+
+  <xacro:property name="standalone_mode" value="$(arg standalone)"/>
+  <xacro:property name="selected_hardware_mode" value="$(arg hardware_mode)"/>
+
   <xacro:macro
       name="rav_provisional_inertial"
       params="mass xyz ixx iyy izz">
@@ -35,295 +33,546 @@
     </inertial>
   </xacro:macro>
 
-  <xacro:macro name="rav_manipulator"
-               params="parent_link mount_xyz:='0 0 0' mount_rpy:='0 0 0' use_fake_hardware:=false">
+  <xacro:macro
+      name="rav_manipulator"
+      params="parent_link
+              mount_xyz:='0 0 0'
+              mount_rpy:='0 0 0'
+              use_fake_hardware:=false
+              hardware_mode:='none'">
 
-    <!--
-      Referência geométrica extraída da pose CAD recebida, em metros.
-      J1 = eixo do horn do Dynamixel 1
-      J2 = eixo do horn do Dynamixel 2
-      J3 = eixo do horn do Dynamixel 3
-
-      As transforms J1→J2 e J2→J3 definem a pose zero no CAD. Não são os
-      comprimentos nominais do TCC; são as distâncias centro-a-centro reais
-      da montagem exportada.
-    -->
+    <!-- Geometria validada dos eixos do braço. -->
     <xacro:property name="j1_to_j2_y" value="0.000029639983"/>
     <xacro:property name="j1_to_j2_z" value="0.289118072919"/>
     <xacro:property name="j2_to_j3_y" value="-0.334030187591"/>
     <xacro:property name="j2_to_j3_z" value="-0.000015558969"/>
 
-    <!-- Limites provisórios: somente para RViz/MoveIt sem hardware real. -->
     <xacro:property name="joint_lower_limit" value="${-pi / 2.0}"/>
     <xacro:property name="joint_upper_limit" value="${ pi / 2.0}"/>
     <xacro:property name="joint_effort_limit" value="10.0"/>
     <xacro:property name="joint_velocity_limit" value="0.50"/>
 
+    <!--
+      Gripper: pinhão + cremalheira dupla, acionado pelo Dynamixel 4
+      (XM540-W270-R, encoder de 4096 ticks/volta).
+
+      Calibração validada no Dynamixel Wizard: motor centrado (tick
+      absoluto 2048 = 180°) é a posição fechada; abertura máxima segura
+      medida em tick absoluto 395 (34,72°). O delta real é 2048-395 =
+      1653 ticks (145,28°) — não 395, que é só a leitura absoluta do
+      lado aberto. gripper_max_travel foi originalmente calculado com
+      395 como se fosse o delta relativo; escalado proporcionalmente
+      por 1653/395 pra manter o raio do pinhão fisicamente plausível
+      (~7mm, compatível com o diâmetro visível da engrenagem na mesh).
+
+      O raio primitivo do pinhão é derivado dessa calibração e usado
+      como multiplicador nas juntas mimic dos dedos — para cremalheira
+      e pinhão, curso linear = raio x ângulo do pinhão é uma relação
+      exata, não uma aproximação.
+
+      Effort/velocity do pinhão vêm do torque de stall e da
+      velocidade sem carga do XM540-W270-R, interpolados para 12,7V
+      (ficha Robotis). Effort/velocity dos dedos são derivados do
+      pinhão pelo mesmo raio.
+    -->
+    <xacro:property name="gripper_max_travel_ticks" value="1653"/>
+    <xacro:property name="dxl_ticks_per_rev" value="4096"/>
+    <xacro:property name="gripper_max_travel" value="0.017749692"/>
+
+    <xacro:property
+        name="gripper_pinion_max_angle"
+        value="${gripper_max_travel_ticks * 2.0 * pi / dxl_ticks_per_rev}"/>
+    <xacro:property
+        name="gripper_pinion_radius"
+        value="${gripper_max_travel / gripper_pinion_max_angle}"/>
+
+    <xacro:property name="gripper_pinion_effort_limit" value="11.175"/>
+    <xacro:property name="gripper_pinion_velocity_limit" value="0.50"/>
+
+    <xacro:property
+        name="gripper_finger_effort_limit"
+        value="${gripper_pinion_effort_limit / gripper_pinion_radius}"/>
+    <xacro:property
+        name="gripper_finger_velocity_limit"
+        value="${gripper_pinion_velocity_limit * gripper_pinion_radius}"/>
+
+    <!--
+      dedo_esquerdo.stl/dedo_direito.stl foram exportados numa pose
+      aberta do CAD, não na posição fechada. gripper_max_travel (do
+      wizard, motor centrado = fechado) só cobre o curso fino de
+      abertura segura; sozinho ele não aproxima as pontas o
+      suficiente para tocarem em pinion=0.
+
+      gripper_finger_closed_offset é o deslocamento estático adicional
+      (por dedo) pra compensar isso. Base: vértice mais extremo (ápice)
+      de cada ponta nas meshes, resolvendo o deslocamento simétrico que
+      zera o vão entre elas (24,2159mm) — mas isso exagerou o fechamento
+      (dedos entrando um no outro). Corrigido com calibração visual: o
+      usuário comparou contra a gripper real e confirmou que
+      gripper_pinion_joint=20° no modelo antigo batia com o fechamento
+      real, então subtraímos o curso linear equivalente a 20° do
+      pinhão (raio x 20°) do valor bruto da mesh.
+    -->
+    <xacro:property name="gripper_finger_closed_offset_mesh_estimate" value="0.024215855"/>
+    <xacro:property name="gripper_finger_closed_offset_visual_correction_deg" value="20.0"/>
+    <xacro:property
+        name="gripper_finger_closed_offset"
+        value="${gripper_finger_closed_offset_mesh_estimate - gripper_pinion_radius * gripper_finger_closed_offset_visual_correction_deg * pi / 180.0}"/>
+
+    <!-- Origem CAD usada pelas meshes do punho e da gripper. -->
+    <xacro:property name="gripper_cad_origin_y" value="0.390472110866"/>
+    <xacro:property name="gripper_cad_origin_z" value="-1.011787152338"/>
+    <xacro:property
+        name="gripper_cad_origin"
+        value="0 ${gripper_cad_origin_y} ${gripper_cad_origin_z}"/>
+
+    <!--
+      Centro geométrico do pinhão (bounding box de pinhao.stl, dados
+      brutos da mesh), usado como origem da junta revoluta pra ela
+      girar no próprio eixo em vez de descrever um arco em torno da
+      origem de gripper_base_link.
+    -->
+    <xacro:property name="gripper_pinion_mesh_center_x" value="0.015923602"/>
+    <xacro:property name="gripper_pinion_mesh_center_y" value="-0.481112213"/>
+    <xacro:property name="gripper_pinion_mesh_center_z" value="1.013871002"/>
+
     <material name="rav_manipulator_motor">
       <color rgba="0.16 0.16 0.16 1.0"/>
     </material>
+
     <material name="rav_manipulator_structure">
       <color rgba="0.58 0.58 0.60 1.0"/>
     </material>
 
-    <!--
-      Mount externo. No modo standalone, o parent é manipulator_world.
-      Na integração final com o RAV, o parent será um frame da estrutura
-      interna e mount_xyz/mount_rpy serão medidos no CAD completo.
-    -->
+    <material name="rav_gripper_base_material">
+      <color rgba="0.20 0.20 0.22 1.0"/>
+    </material>
+
+    <material name="rav_gripper_finger_material">
+      <color rgba="0.58 0.58 0.60 1.0"/>
+    </material>
+
+    <material name="rav_gripper_pinion_material">
+      <color rgba="0.35 0.35 0.37 1.0"/>
+    </material>
+
+    <!-- Mount externo. -->
     <joint name="rav_manipulator_mount_joint" type="fixed">
       <parent link="${parent_link}"/>
       <child link="manipulator_base_link"/>
       <origin xyz="${mount_xyz}" rpy="${mount_rpy}"/>
     </joint>
 
-    <!--
-      Dynamixel 1: a carcaça é fixada diretamente à estrutura interna do RAV.
-      O origin abaixo leva o centro do horn do STL para a origem do link.
-    -->
+    <!-- Dynamixel 1. -->
     <link name="manipulator_base_link">
       <xacro:rav_provisional_inertial
           mass="1.0"
           xyz="0 0 0"
           ixx="0.004" iyy="0.004" izz="0.004"/>
+
       <visual>
         <origin xyz="0 0.047471563258 -0.733684638388" rpy="0 0 0"/>
         <geometry>
-          <mesh filename="package://rav_description/meshes/manipulator/dynamixel_xm540.stl"
-                scale="0.001 0.001 0.001"/>
+          <mesh
+              filename="package://rav_description/meshes/manipulator/dynamixel_xm540.stl"
+              scale="0.001 0.001 0.001"/>
         </geometry>
         <material name="rav_manipulator_motor"/>
       </visual>
+
       <collision>
         <origin xyz="0 0.047471563258 -0.733684638388" rpy="0 0 0"/>
         <geometry>
-          <mesh filename="package://rav_description/meshes/manipulator/dynamixel_xm540.stl"
-                scale="0.001 0.001 0.001"/>
+          <mesh
+              filename="package://rav_description/meshes/manipulator/dynamixel_xm540.stl"
+              scale="0.001 0.001 0.001"/>
         </geometry>
       </collision>
     </link>
 
-    <!-- J1: o horn do Dynamixel 1 movimenta U aço 1 + Link 1. -->
     <joint name="shoulder_joint" type="revolute">
       <parent link="manipulator_base_link"/>
       <child link="shoulder_link"/>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <axis xyz="1 0 0"/>
-      <limit lower="${joint_lower_limit}" upper="${joint_upper_limit}"
-             effort="${joint_effort_limit}" velocity="${joint_velocity_limit}"/>
+      <limit
+          lower="${joint_lower_limit}"
+          upper="${joint_upper_limit}"
+          effort="${joint_effort_limit}"
+          velocity="${joint_velocity_limit}"/>
     </joint>
 
-    <!--
-      Conjunto rígido do primeiro elo:
-      U aço 1 + Link 1 + carcaça fixa do Dynamixel 2.
-    -->
+    <!-- Link 1 e Dynamixel 2. -->
     <link name="shoulder_link">
       <xacro:rav_provisional_inertial
           mass="1.5"
           xyz="0 0.000015 0.139059"
           ixx="0.010" iyy="0.010" izz="0.002"/>
+
       <visual>
         <origin xyz="0 0.047471563258 -0.733684638388" rpy="0 0 0"/>
         <geometry>
-          <mesh filename="package://rav_description/meshes/manipulator/link_1_assembly.stl"
-                scale="0.001 0.001 0.001"/>
+          <mesh
+              filename="package://rav_description/meshes/manipulator/link_1_assembly.stl"
+              scale="0.001 0.001 0.001"/>
         </geometry>
         <material name="rav_manipulator_structure"/>
       </visual>
+
       <collision>
         <origin xyz="0 0.047471563258 -0.733684638388" rpy="0 0 0"/>
         <geometry>
-          <mesh filename="package://rav_description/meshes/manipulator/link_1_assembly.stl"
-                scale="0.001 0.001 0.001"/>
+          <mesh
+              filename="package://rav_description/meshes/manipulator/link_1_assembly.stl"
+              scale="0.001 0.001 0.001"/>
         </geometry>
       </collision>
 
-      <!-- Corpo do Dynamixel 2, fixo no Link 1. -->
       <visual>
         <origin xyz="0 0.047501203241 -0.444566565469" rpy="0 0 0"/>
         <geometry>
-          <mesh filename="package://rav_description/meshes/manipulator/dynamixel_xm540.stl"
-                scale="0.001 0.001 0.001"/>
+          <mesh
+              filename="package://rav_description/meshes/manipulator/dynamixel_xm540.stl"
+              scale="0.001 0.001 0.001"/>
         </geometry>
         <material name="rav_manipulator_motor"/>
       </visual>
+
       <collision>
         <origin xyz="0 0.047501203241 -0.444566565469" rpy="0 0 0"/>
         <geometry>
-          <mesh filename="package://rav_description/meshes/manipulator/dynamixel_xm540.stl"
-                scale="0.001 0.001 0.001"/>
+          <mesh
+              filename="package://rav_description/meshes/manipulator/dynamixel_xm540.stl"
+              scale="0.001 0.001 0.001"/>
         </geometry>
       </collision>
     </link>
 
-    <!-- J2: o horn do Dynamixel 2 movimenta U aço 2 + Link 2. -->
     <joint name="elbow_joint" type="revolute">
       <parent link="shoulder_link"/>
       <child link="elbow_link"/>
       <origin xyz="0 ${j1_to_j2_y} ${j1_to_j2_z}" rpy="0 0 0"/>
       <axis xyz="1 0 0"/>
-      <limit lower="${joint_lower_limit}" upper="${joint_upper_limit}"
-             effort="${joint_effort_limit}" velocity="${joint_velocity_limit}"/>
+      <limit
+          lower="${joint_lower_limit}"
+          upper="${joint_upper_limit}"
+          effort="${joint_effort_limit}"
+          velocity="${joint_velocity_limit}"/>
     </joint>
 
-    <!--
-      Conjunto rígido do segundo elo:
-      U aço 2 + Link 2 + carcaça fixa do Dynamixel 3.
-    -->
+    <!-- Link 2 e Dynamixel 3. -->
     <link name="elbow_link">
       <xacro:rav_provisional_inertial
           mass="1.2"
           xyz="0 -0.171515 0"
           ixx="0.012" iyy="0.002" izz="0.012"/>
+
       <visual>
         <origin xyz="0 0.047441923275 -1.011802711307" rpy="0 0 0"/>
         <geometry>
-          <mesh filename="package://rav_description/meshes/manipulator/link_2_assembly.stl"
-                scale="0.001 0.001 0.001"/>
+          <mesh
+              filename="package://rav_description/meshes/manipulator/link_2_assembly.stl"
+              scale="0.001 0.001 0.001"/>
         </geometry>
         <material name="rav_manipulator_structure"/>
       </visual>
+
       <collision>
         <origin xyz="0 0.047441923275 -1.011802711307" rpy="0 0 0"/>
         <geometry>
-          <mesh filename="package://rav_description/meshes/manipulator/link_2_assembly.stl"
-                scale="0.001 0.001 0.001"/>
+          <mesh
+              filename="package://rav_description/meshes/manipulator/link_2_assembly.stl"
+              scale="0.001 0.001 0.001"/>
         </geometry>
       </collision>
 
-      <!--
-        Corpo do Dynamixel 3, fixo no Link 2.
-        O mesmo STL do Dynamixel 1 é reutilizado, mas com rotação de +90°
-        no eixo X. Assim, a carcaça fica alojada no interior da ponta do
-        Link 2, mantendo o centro do horn exatamente em J3.
-      -->
       <visual>
-        <origin xyz="0 0.399654450797 0.047456004289" rpy="1.57079632679 0 0"/>
+        <origin
+            xyz="0 0.399654450797 0.047456004289"
+            rpy="1.57079632679 0 0"/>
         <geometry>
-          <mesh filename="package://rav_description/meshes/manipulator/dynamixel_xm540.stl"
-                scale="0.001 0.001 0.001"/>
+          <mesh
+              filename="package://rav_description/meshes/manipulator/dynamixel_xm540.stl"
+              scale="0.001 0.001 0.001"/>
         </geometry>
         <material name="rav_manipulator_motor"/>
       </visual>
+
       <collision>
-        <origin xyz="0 0.399654450797 0.047456004289" rpy="1.57079632679 0 0"/>
+        <origin
+            xyz="0 0.399654450797 0.047456004289"
+            rpy="1.57079632679 0 0"/>
         <geometry>
-          <mesh filename="package://rav_description/meshes/manipulator/dynamixel_xm540.stl"
-                scale="0.001 0.001 0.001"/>
+          <mesh
+              filename="package://rav_description/meshes/manipulator/dynamixel_xm540.stl"
+              scale="0.001 0.001 0.001"/>
         </geometry>
       </collision>
     </link>
 
-    <!-- J3: o horn do Dynamixel 3 movimenta U aço 3 e a futura garra. -->
     <joint name="wrist_joint" type="revolute">
       <parent link="elbow_link"/>
       <child link="wrist_link"/>
       <origin xyz="0 ${j2_to_j3_y} ${j2_to_j3_z}" rpy="0 0 0"/>
       <axis xyz="1 0 0"/>
-      <limit lower="${joint_lower_limit}" upper="${joint_upper_limit}"
-             effort="${joint_effort_limit}" velocity="${joint_velocity_limit}"/>
+      <limit
+          lower="${joint_lower_limit}"
+          upper="${joint_upper_limit}"
+          effort="${joint_effort_limit}"
+          velocity="${joint_velocity_limit}"/>
     </joint>
 
-    <!-- U aço 3, onde o Dynamixel 4 será fixado quando a garra entrar. -->
+    <!-- Punho e Dynamixel 4 visual. -->
     <link name="wrist_link">
       <xacro:rav_provisional_inertial
           mass="0.8"
           xyz="0 0 0"
           ixx="0.004" iyy="0.004" izz="0.004"/>
+
       <visual>
         <origin xyz="0 0.390472110866 -1.011787152338" rpy="0 0 0"/>
         <geometry>
-          <mesh filename="package://rav_description/meshes/manipulator/wrist_assembly.stl"
-                scale="0.001 0.001 0.001"/>
+          <mesh
+              filename="package://rav_description/meshes/manipulator/wrist_assembly.stl"
+              scale="0.001 0.001 0.001"/>
         </geometry>
         <material name="rav_manipulator_structure"/>
       </visual>
+
       <collision>
         <origin xyz="0 0.390472110866 -1.011787152338" rpy="0 0 0"/>
         <geometry>
-          <mesh filename="package://rav_description/meshes/manipulator/wrist_assembly.stl"
-                scale="0.001 0.001 0.001"/>
+          <mesh
+              filename="package://rav_description/meshes/manipulator/wrist_assembly.stl"
+              scale="0.001 0.001 0.001"/>
         </geometry>
       </collision>
 
-      <!--
-        Dynamixel 4: mesma geometria do XM540, rigidamente preso ao U aço 3.
-        Não é uma junta do braço: neste estágio ele é apenas a visualização e
-        a colisão do atuador que será usado futuramente para a gripper.
-
-        Correção de orientação:
-        - a rotação anterior em X colocava o corpo do motor na vertical;
-        - a pose abaixo parte da orientação de montagem anterior e adiciona
-          +90° no eixo Z, como no CAD do Shapr3D;
-        - a translação mantém o centro do horn no mesmo ponto do U aço 3.
-      -->
       <visual>
-        <origin xyz="-0.718 -0.0619 0.0499"
-                rpy="1.57079632679 0 1.57079632679"/>
+        <origin
+            xyz="-0.718 -0.0619 0.0499"
+            rpy="1.57079632679 0 1.57079632679"/>
         <geometry>
-          <mesh filename="package://rav_description/meshes/manipulator/dynamixel_xm540.stl"
-                scale="0.001 0.001 0.001"/>
+          <mesh
+              filename="package://rav_description/meshes/manipulator/dynamixel_xm540.stl"
+              scale="0.001 0.001 0.001"/>
         </geometry>
         <material name="rav_manipulator_motor"/>
       </visual>
+
       <collision>
-        <origin xyz="-0.718 -0.0619 0.0499"
-                rpy="1.57079632679 0 1.57079632679"/>
+        <origin
+            xyz="-0.718 -0.0619 0.0499"
+            rpy="1.57079632679 0 1.57079632679"/>
         <geometry>
-          <mesh filename="package://rav_description/meshes/manipulator/dynamixel_xm540.stl"
-                scale="0.001 0.001 0.001"/>
+          <mesh
+              filename="package://rav_description/meshes/manipulator/dynamixel_xm540.stl"
+              scale="0.001 0.001 0.001"/>
         </geometry>
       </collision>
     </link>
 
-
-    <!--
-      Ponto terminal provisório do terceiro elo.
-      Não representa uma garra; representa a ponta física usada nos testes
-      de alcance do manipulador sem gripper.
-    -->
-    <link name="wrist_tip">
+    <!-- Base da gripper. -->
+    <link name="gripper_base_link">
       <visual>
+        <origin xyz="${gripper_cad_origin}" rpy="0 0 0"/>
         <geometry>
-          <sphere radius="0.015"/>
+          <mesh
+              filename="package://rav_description/meshes/manipulator/gripper/gripper_base.stl"
+              scale="0.001 0.001 0.001"/>
         </geometry>
-        <material name="wrist_tip_material">
-          <color rgba="1.0 0.0 0.0 1.0"/>
-        </material>
+        <material name="rav_gripper_base_material"/>
       </visual>
+
+      <collision>
+        <origin xyz="${gripper_cad_origin}" rpy="0 0 0"/>
+        <geometry>
+          <mesh
+              filename="package://rav_description/meshes/manipulator/gripper/gripper_base.stl"
+              scale="0.001 0.001 0.001"/>
+        </geometry>
+      </collision>
     </link>
 
-    <joint name="wrist_tip_joint" type="fixed">
+    <joint name="gripper_base_joint" type="fixed">
       <parent link="wrist_link"/>
-      <child link="wrist_tip"/>
-      <origin xyz="0 -0.120 0" rpy="0 0 0"/>
-    </joint>
-
-    <!-- Frame neutro para a futura garra. A posição final ainda não foi presumida. -->
-    <link name="gripper_mount"/>
-    <joint name="gripper_mount_joint" type="fixed">
-      <parent link="wrist_link"/>
-      <child link="gripper_mount"/>
+      <child link="gripper_base_link"/>
       <origin xyz="0 0 0" rpy="0 0 0"/>
     </joint>
 
-    <!-- Simulação somente para o demo do MoveIt, sem OpenCM/Dynamixel físico. -->
+    <!--
+      Pinhão visual. Origem deslocada por -centro_da_mesh: compensa a
+      junta abaixo, que agora fica ancorada no centro geométrico da
+      engrenagem em vez de na origem de gripper_base_link.
+    -->
+    <link name="gripper_pinion_link">
+      <visual>
+        <origin
+            xyz="${-gripper_pinion_mesh_center_x} ${-gripper_pinion_mesh_center_y} ${-gripper_pinion_mesh_center_z}"
+            rpy="0 0 0"/>
+        <geometry>
+          <mesh
+              filename="package://rav_description/meshes/manipulator/gripper/pinhao.stl"
+              scale="0.001 0.001 0.001"/>
+        </geometry>
+        <material name="rav_gripper_pinion_material"/>
+      </visual>
+
+      <collision>
+        <origin
+            xyz="${-gripper_pinion_mesh_center_x} ${-gripper_pinion_mesh_center_y} ${-gripper_pinion_mesh_center_z}"
+            rpy="0 0 0"/>
+        <geometry>
+          <mesh
+              filename="package://rav_description/meshes/manipulator/gripper/pinhao.stl"
+              scale="0.001 0.001 0.001"/>
+        </geometry>
+      </collision>
+    </link>
+
+    <!--
+      Única junta realmente atuada da gripper: gira com o horn do
+      Dynamixel 4. Eixo Y confirmado pela geometria da mesh do pinhão
+      (espessura fina em Y, ~16 mm de diâmetro em X/Z — perfil de
+      engrenagem visto de perfil). Origem no centro geométrico do
+      pinhão (gripper_cad_origin + centro da mesh), não em "0 0 0":
+      sem isso a engrenagem descreve um arco em vez de girar no
+      próprio eixo.
+    -->
+    <joint name="gripper_pinion_joint" type="revolute">
+      <parent link="gripper_base_link"/>
+      <child link="gripper_pinion_link"/>
+      <origin
+          xyz="${gripper_pinion_mesh_center_x} ${gripper_pinion_mesh_center_y + gripper_cad_origin_y} ${gripper_pinion_mesh_center_z + gripper_cad_origin_z}"
+          rpy="0 0 0"/>
+      <axis xyz="0 1 0"/>
+      <limit
+          lower="0.0"
+          upper="${gripper_pinion_max_angle}"
+          effort="${gripper_pinion_effort_limit}"
+          velocity="${gripper_pinion_velocity_limit}"/>
+    </joint>
+
+    <!-- Meshes dos dedos: o CAD foi exportado na abertura máxima. -->
+    <link name="left_finger_link">
+      <visual>
+        <origin
+            xyz="${-gripper_finger_closed_offset} 0.390472110866 -1.011787152338"
+            rpy="0 0 0"/>
+        <geometry>
+          <mesh
+              filename="package://rav_description/meshes/manipulator/gripper/dedo_esquerdo.stl"
+              scale="0.001 0.001 0.001"/>
+        </geometry>
+        <material name="rav_gripper_finger_material"/>
+      </visual>
+
+      <collision>
+        <origin
+            xyz="${-gripper_finger_closed_offset} 0.390472110866 -1.011787152338"
+            rpy="0 0 0"/>
+        <geometry>
+          <mesh
+              filename="package://rav_description/meshes/manipulator/gripper/dedo_esquerdo.stl"
+              scale="0.001 0.001 0.001"/>
+        </geometry>
+      </collision>
+    </link>
+
+    <link name="right_finger_link">
+      <visual>
+        <origin
+            xyz="${gripper_finger_closed_offset} 0.390472110866 -1.011787152338"
+            rpy="0 0 0"/>
+        <geometry>
+          <mesh
+              filename="package://rav_description/meshes/manipulator/gripper/dedo_direito.stl"
+              scale="0.001 0.001 0.001"/>
+        </geometry>
+        <material name="rav_gripper_finger_material"/>
+      </visual>
+
+      <collision>
+        <origin
+            xyz="${gripper_finger_closed_offset} 0.390472110866 -1.011787152338"
+            rpy="0 0 0"/>
+        <geometry>
+          <mesh
+              filename="package://rav_description/meshes/manipulator/gripper/dedo_direito.stl"
+              scale="0.001 0.001 0.001"/>
+        </geometry>
+      </collision>
+    </link>
+
+    <!--
+      Cremalheiras: seguem o pinhão via mimic, sem interface própria
+      no ros2_control. Deslocamento linear = gripper_pinion_radius x
+      ângulo do pinhão. Os eixos locais já opostos (1 0 0 / -1 0 0)
+      fazem os dois dedos se afastarem/aproximarem simetricamente a
+      partir da única junta mestre, o mesmo multiplicador positivo
+      funciona pros dois.
+    -->
+    <joint name="left_finger_joint" type="prismatic">
+      <parent link="gripper_base_link"/>
+      <child link="left_finger_link"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <axis xyz="1 0 0"/>
+      <limit
+          lower="0.0"
+          upper="${gripper_max_travel}"
+          effort="${gripper_finger_effort_limit}"
+          velocity="${gripper_finger_velocity_limit}"/>
+      <mimic joint="gripper_pinion_joint" multiplier="${gripper_pinion_radius}" offset="0.0"/>
+    </joint>
+
+    <joint name="right_finger_joint" type="prismatic">
+      <parent link="gripper_base_link"/>
+      <child link="right_finger_link"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <axis xyz="-1 0 0"/>
+      <limit
+          lower="0.0"
+          upper="${gripper_max_travel}"
+          effort="${gripper_finger_effort_limit}"
+          velocity="${gripper_finger_velocity_limit}"/>
+      <mimic joint="gripper_pinion_joint" multiplier="${gripper_pinion_radius}" offset="0.0"/>
+    </joint>
+
+    <!-- TCP atual da gripper; substitui a esfera wrist_tip provisória. -->
+    <link name="gripper_tcp"/>
+
+    <joint name="gripper_tcp_joint" type="fixed">
+      <parent link="gripper_base_link"/>
+      <child link="gripper_tcp"/>
+      <origin xyz="0 -0.140 0.002" rpy="0 0 0"/>
+    </joint>
+
+    <!-- GenericSystem preservado para usos que instanciem a macro dessa forma. -->
     <xacro:if value="${use_fake_hardware}">
       <ros2_control name="RavManipulatorFakeSystem" type="system">
         <hardware>
           <plugin>mock_components/GenericSystem</plugin>
         </hardware>
+
         <joint name="shoulder_joint">
           <command_interface name="position"/>
           <state_interface name="position"/>
           <state_interface name="velocity"/>
         </joint>
+
         <joint name="elbow_joint">
           <command_interface name="position"/>
           <state_interface name="position"/>
           <state_interface name="velocity"/>
         </joint>
+
         <joint name="wrist_joint">
+          <command_interface name="position"/>
+          <state_interface name="position"/>
+          <state_interface name="velocity"/>
+        </joint>
+
+        <joint name="gripper_pinion_joint">
           <command_interface name="position"/>
           <state_interface name="position"/>
           <state_interface name="velocity"/>
@@ -332,4 +581,116 @@
     </xacro:if>
 
   </xacro:macro>
+
+  <!-- Instanciação usada diretamente pelos launches real e dry-run. -->
+  <xacro:if value="${standalone_mode}">
+    <link name="manipulator_world"/>
+
+    <xacro:rav_manipulator
+        parent_link="manipulator_world"
+        mount_xyz="0 0 0"
+        mount_rpy="0 0 0"
+        use_fake_hardware="false"
+        hardware_mode="${selected_hardware_mode}"/>
+
+    <xacro:if value="${selected_hardware_mode == 'dry_run'}">
+      <ros2_control name="RavManipulatorDynamixelDryRun" type="system">
+        <hardware>
+          <plugin>rav_dynamixel_hardware/RavDynamixelHardware</plugin>
+          <param name="dry_run">true</param>
+        </hardware>
+
+        <joint name="shoulder_joint">
+          <command_interface name="position"/>
+          <state_interface name="position"/>
+          <state_interface name="velocity"/>
+        </joint>
+
+        <joint name="elbow_joint">
+          <command_interface name="position"/>
+          <state_interface name="position"/>
+          <state_interface name="velocity"/>
+        </joint>
+
+        <joint name="wrist_joint">
+          <command_interface name="position"/>
+          <state_interface name="position"/>
+          <state_interface name="velocity"/>
+        </joint>
+
+        <joint name="gripper_pinion_joint">
+          <command_interface name="position"/>
+          <state_interface name="position"/>
+          <state_interface name="velocity"/>
+        </joint>
+      </ros2_control>
+    </xacro:if>
+
+    <xacro:if value="${selected_hardware_mode == 'real'}">
+      <ros2_control name="RavManipulatorDynamixelReal" type="system">
+        <hardware>
+          <plugin>rav_dynamixel_hardware/RavDynamixelHardware</plugin>
+          <param name="dry_run">false</param>
+          <param name="enable_motors">true</param>
+          <param name="device">/dev/serial/by-id/usb-CM-900_ROBOTIS_Virtual_COM_Port-if00</param>
+          <param name="baud">1000000</param>
+          <param name="profile_velocity">35</param>
+          <param name="profile_acceleration">12</param>
+        </hardware>
+
+        <joint name="shoulder_joint">
+          <param name="id">1</param>
+          <param name="direction">1</param>
+          <param name="zero_tick">2048</param>
+          <param name="min_tick">1024</param>
+          <param name="max_tick">3072</param>
+          <command_interface name="position"/>
+          <state_interface name="position"/>
+          <state_interface name="velocity"/>
+        </joint>
+
+        <joint name="elbow_joint">
+          <param name="id">2</param>
+          <param name="direction">1</param>
+          <param name="zero_tick">2048</param>
+          <param name="min_tick">1024</param>
+          <param name="max_tick">3072</param>
+          <command_interface name="position"/>
+          <state_interface name="position"/>
+          <state_interface name="velocity"/>
+        </joint>
+
+        <joint name="wrist_joint">
+          <param name="id">3</param>
+          <param name="direction">1</param>
+          <param name="zero_tick">2048</param>
+          <param name="min_tick">1024</param>
+          <param name="max_tick">3072</param>
+          <command_interface name="position"/>
+          <state_interface name="position"/>
+          <state_interface name="velocity"/>
+        </joint>
+
+        <!--
+          Dynamixel 4 (gripper). Calibrado no Dynamixel Wizard: motor
+          centrado (tick 2048) = fechado = 0 rad; abertura máxima
+          segura (tick 395) = gripper_pinion_max_angle. direction=-1
+          porque abrir DIMINUI o tick, ao contrário dos joints do
+          braço. min_tick < max_tick é obrigatório no driver
+          (std::clamp) mesmo com direction invertido.
+        -->
+        <joint name="gripper_pinion_joint">
+          <param name="id">4</param>
+          <param name="direction">-1</param>
+          <param name="zero_tick">2048</param>
+          <param name="min_tick">395</param>
+          <param name="max_tick">2048</param>
+          <command_interface name="position"/>
+          <state_interface name="position"/>
+          <state_interface name="velocity"/>
+        </joint>
+      </ros2_control>
+    </xacro:if>
+  </xacro:if>
+
 </robot>

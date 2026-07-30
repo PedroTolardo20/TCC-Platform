@@ -1,0 +1,171 @@
+<?xml version="1.0"?>
+<!--
+  Gripper do manipulador RAV.
+
+  Modelo atual:
+  - geometria visual da base, pinhão e dois dedos;
+  - movimento prismático simétrico;
+  - gripper_joint representa o curso linear de UM dedo;
+  - right_finger_joint acompanha gripper_joint por mimic;
+  - sem ros2_control físico do Dynamixel 4 nesta etapa.
+
+  Convenção:
+  - gripper_joint = 0.0 m: fechamento máximo;
+  - gripper_joint = 0.004241456879 m: abertura máxima;
+  - 0 ticks do XM540: fechamento máximo;
+  - 395 ticks do XM540: abertura máxima.
+
+  As meshes foram exportadas na posição de abertura máxima e no mesmo
+  sistema de coordenadas CAD utilizado pelo wrist_assembly.
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <xacro:macro name="rav_gripper" params="parent_link">
+
+    <!--
+      Conversão do sistema global do CAD para o frame wrist_link.
+      É a mesma transformação usada pelo wrist_assembly.
+    -->
+    <xacro:property
+        name="gripper_cad_origin"
+        value="0 0.390472110866 -1.011787152338"/>
+
+    <!-- Curso linear máximo de cada dedo. -->
+    <xacro:property
+        name="gripper_max_travel"
+        value="0.004241456879"/>
+
+    <xacro:property name="gripper_effort_limit" value="30.0"/>
+    <xacro:property name="gripper_velocity_limit" value="0.02"/>
+
+    <material name="rav_gripper_base_material">
+      <color rgba="0.20 0.20 0.22 1.0"/>
+    </material>
+
+    <material name="rav_gripper_finger_material">
+      <color rgba="0.58 0.58 0.60 1.0"/>
+    </material>
+
+    <material name="rav_gripper_pinion_material">
+      <color rgba="0.35 0.35 0.37 1.0"/>
+    </material>
+
+    <!-- Base rígida da gripper. -->
+    <link name="gripper_base_link">
+      <visual>
+        <origin xyz="${gripper_cad_origin}" rpy="0 0 0"/>
+        <geometry>
+          <mesh
+              filename="package://rav_description/meshes/manipulator/gripper/gripper_base.stl"
+              scale="0.001 0.001 0.001"/>
+        </geometry>
+        <material name="rav_gripper_base_material"/>
+      </visual>
+    </link>
+
+    <joint name="gripper_base_joint" type="fixed">
+      <parent link="${parent_link}"/>
+      <child link="gripper_base_link"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </joint>
+
+    <!--
+      Pinhão apenas visual nesta primeira etapa.
+      A animação rotativa será adicionada depois da validação do sentido real.
+    -->
+    <link name="gripper_pinion_link">
+      <visual>
+        <origin xyz="${gripper_cad_origin}" rpy="0 0 0"/>
+        <geometry>
+          <mesh
+              filename="package://rav_description/meshes/manipulator/gripper/pinhao.stl"
+              scale="0.001 0.001 0.001"/>
+        </geometry>
+        <material name="rav_gripper_pinion_material"/>
+      </visual>
+    </link>
+
+    <joint name="gripper_pinion_joint" type="fixed">
+      <parent link="gripper_base_link"/>
+      <child link="gripper_pinion_link"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </joint>
+
+    <!-- Dedo esquerdo: junta principal comandada. -->
+    <link name="left_finger_link">
+      <visual>
+        <!--
+          A mesh está desenhada na abertura máxima.
+          O deslocamento -max_travel faz q=0 representar a garra fechada.
+        -->
+        <origin
+            xyz="${-gripper_max_travel} 0.390472110866 -1.011787152338"
+            rpy="0 0 0"/>
+        <geometry>
+          <mesh
+              filename="package://rav_description/meshes/manipulator/gripper/dedo_esquerdo.stl"
+              scale="0.001 0.001 0.001"/>
+        </geometry>
+        <material name="rav_gripper_finger_material"/>
+      </visual>
+    </link>
+
+    <joint name="gripper_joint" type="prismatic">
+      <parent link="gripper_base_link"/>
+      <child link="left_finger_link"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <axis xyz="1 0 0"/>
+      <limit
+          lower="0.0"
+          upper="${gripper_max_travel}"
+          effort="${gripper_effort_limit}"
+          velocity="${gripper_velocity_limit}"/>
+    </joint>
+
+    <!-- Dedo direito: movimento espelhado por mimic. -->
+    <link name="right_finger_link">
+      <visual>
+        <!--
+          A mesh está desenhada na abertura máxima.
+          O deslocamento +max_travel faz q=0 representar a garra fechada.
+        -->
+        <origin
+            xyz="${gripper_max_travel} 0.390472110866 -1.011787152338"
+            rpy="0 0 0"/>
+        <geometry>
+          <mesh
+              filename="package://rav_description/meshes/manipulator/gripper/dedo_direito.stl"
+              scale="0.001 0.001 0.001"/>
+        </geometry>
+        <material name="rav_gripper_finger_material"/>
+      </visual>
+    </link>
+
+    <joint name="right_finger_joint" type="prismatic">
+      <parent link="gripper_base_link"/>
+      <child link="right_finger_link"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <axis xyz="-1 0 0"/>
+      <limit
+          lower="0.0"
+          upper="${gripper_max_travel}"
+          effort="${gripper_effort_limit}"
+          velocity="${gripper_velocity_limit}"/>
+      <mimic joint="gripper_joint" multiplier="1.0" offset="0.0"/>
+    </joint>
+
+    <!--
+      TCP atual da gripper, no centro entre os dedos e próximo à região de pega.
+      Este frame substitui a esfera terminal provisória.
+    -->
+    <link name="gripper_tcp"/>
+
+    <joint name="gripper_tcp_joint" type="fixed">
+      <parent link="gripper_base_link"/>
+      <child link="gripper_tcp"/>
+      <origin xyz="0 -0.140 0.002" rpy="0 0 0"/>
+    </joint>
+
+  </xacro:macro>
+
+</robot>
