@@ -19,8 +19,8 @@
       <param name="enable_motors">true</param>
       <param name="device">/dev/serial/by-id/usb-CM-900_ROBOTIS_Virtual_COM_Port-if00</param>
       <param name="baud">1000000</param>
-      <param name="profile_velocity">35</param>
-      <param name="profile_acceleration">12</param>
+      <param name="profile_velocity">70</param>
+      <param name="profile_acceleration">24</param>
     </hardware>
 
     <joint name="shoulder_joint">

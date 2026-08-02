@@ -50,7 +50,7 @@
     <xacro:property name="joint_lower_limit" value="${-pi / 2.0}"/>
     <xacro:property name="joint_upper_limit" value="${ pi / 2.0}"/>
     <xacro:property name="joint_effort_limit" value="10.0"/>
-    <xacro:property name="joint_velocity_limit" value="0.50"/>
+    <xacro:property name="joint_velocity_limit" value="1.0"/>
 
     <!--
       Gripper: pinhão + cremalheira dupla, acionado pelo Dynamixel 4
@@ -87,7 +87,7 @@
         value="${gripper_max_travel / gripper_pinion_max_angle}"/>
 
     <xacro:property name="gripper_pinion_effort_limit" value="11.175"/>
-    <xacro:property name="gripper_pinion_velocity_limit" value="0.50"/>
+    <xacro:property name="gripper_pinion_velocity_limit" value="1.0"/>
 
     <xacro:property
         name="gripper_finger_effort_limit"
@@ -634,8 +634,8 @@
           <param name="enable_motors">true</param>
           <param name="device">/dev/serial/by-id/usb-CM-900_ROBOTIS_Virtual_COM_Port-if00</param>
           <param name="baud">1000000</param>
-          <param name="profile_velocity">35</param>
-          <param name="profile_acceleration">12</param>
+          <param name="profile_velocity">70</param>
+          <param name="profile_acceleration">24</param>
         </hardware>
 
         <joint name="shoulder_joint">
