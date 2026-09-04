@@ -40,7 +40,7 @@ class RAVVision3D(Node):
         self.declare_parameter("color_topic", "/camera/color/image_raw")
         self.declare_parameter(
             "depth_topic",
-            "/camera/depth_registered/image_raw"
+            "/camera/depth/image_raw"
         )
         self.declare_parameter(
             "camera_info_topic",

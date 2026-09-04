@@ -23,6 +23,7 @@ setup(
         'console_scripts': [
             'realtime_inference = rav_vision.realtime_inference:main',
             'realtime_3d_inference = rav_vision.realtime_3d_inference:main',
+            'vision_pick_bridge = rav_vision.vision_pick_bridge:main',
             'yolo26_train = rav_vision.train_yolo26:main',
             'yolo26_val = rav_vision.val_yolo26:main',
             'rav_dataset_check = rav_vision.dataset_check:main',

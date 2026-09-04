@@ -3,6 +3,7 @@
 # "moveit_simple_controller_manager" for the move_group node.
 controller_names:
   - arm_controller
+  - gripper_controller
 
 arm_controller:
   type: FollowJointTrajectory
@@ -12,4 +13,10 @@ arm_controller:
     - shoulder_joint
     - elbow_joint
     - wrist_joint
+
+gripper_controller:
+  type: FollowJointTrajectory
+  action_ns: follow_joint_trajectory
+  default: true
+  joints:
     - gripper_pinion_joint

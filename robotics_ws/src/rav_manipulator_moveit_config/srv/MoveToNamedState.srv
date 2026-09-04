@@ -1,0 +1,8 @@
+# Move o grupo certo (rav_arm ou rav_gripper) para um group_state
+# nomeado definido em config/rav_manipulator.srdf (ex.: "home", "ready",
+# "cad_reference", "open", "closed"). O grupo e resolvido sozinho pelo
+# manipulator_node.py, nao precisa informar.
+string state_name
+---
+bool success
+string message

@@ -1,0 +1,16 @@
+# Move o gripper_tcp do grupo rav_arm ate uma posicao cartesiana via
+# planejamento/IK do MoveIt.
+#
+# Sem campo de orientacao de proposito: o braco tem as 3 juntas no
+# mesmo eixo, entao o conjunto de orientacoes alcancaveis e estreito --
+# travar uma orientacao pedida por fora quase sempre falha (testado na
+# pratica). manipulator_node.py tenta um pequeno conjunto de
+# orientacoes candidatas via IK e usa a primeira que alcancar essa
+# posicao.
+float64 x
+float64 y
+float64 z
+string frame_id manipulator_world
+---
+bool success
+string message

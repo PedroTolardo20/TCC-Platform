@@ -1,0 +1,8 @@
+# Move ate (x, y, z), desanexa e remove o objeto que estava preso na
+# gripper (deixado pelo Pick.srv) e abre a gripper.
+float64 x
+float64 y
+float64 z
+---
+bool success
+string message

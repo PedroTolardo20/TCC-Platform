@@ -1,0 +1,11 @@
+# Abre a gripper, move ate (x, y, z), adiciona um cilindro de colisao
+# simples nessa posicao, anexa ao end effector (rav_gripper) e fecha a
+# gripper.
+float64 x
+float64 y
+float64 z
+float64 radius 0.02
+float64 height 0.08
+---
+bool success
+string message

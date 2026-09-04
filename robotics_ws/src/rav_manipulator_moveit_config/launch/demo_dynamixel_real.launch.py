@@ -6,7 +6,7 @@ import yaml
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import RegisterEventHandler
+from launch.actions import RegisterEventHandler, TimerAction
 from launch.event_handlers import OnProcessExit
 from launch_ros.actions import Node
 from moveit_configs_utils import MoveItConfigsBuilder
@@ -148,6 +148,19 @@ def generate_launch_description():
         ],
     )
 
+    gripper_controller_spawner = Node(
+        package="controller_manager",
+        executable="spawner",
+        output="screen",
+        arguments=[
+            "gripper_controller",
+            "--controller-manager",
+            "/controller_manager",
+            "--controller-manager-timeout",
+            "60",
+        ],
+    )
+
     move_group = Node(
         package="moveit_ros_move_group",
         executable="move_group",
@@ -170,6 +183,12 @@ def generate_launch_description():
         ],
     )
 
+    manipulator_node = Node(
+        package="rav_manipulator_moveit_config",
+        executable="manipulator_node.py",
+        output="both",
+    )
+
     start_arm_controller = RegisterEventHandler(
         OnProcessExit(
             target_action=joint_state_broadcaster_spawner,
@@ -177,10 +196,22 @@ def generate_launch_description():
         )
     )
 
-    start_moveit = RegisterEventHandler(
+    start_gripper_controller = RegisterEventHandler(
         OnProcessExit(
             target_action=arm_controller_spawner,
-            on_exit=[move_group, rviz],
+            on_exit=[gripper_controller_spawner],
+        )
+    )
+
+    # manipulator_node atrasado alguns segundos: subindo junto com
+    # move_group/rviz (os mais pesados de inicializar) as vezes ele
+    # morre logo no inicio por disputa de recurso na largada simultanea.
+    start_manipulator_node = TimerAction(period=4.0, actions=[manipulator_node])
+
+    start_moveit = RegisterEventHandler(
+        OnProcessExit(
+            target_action=gripper_controller_spawner,
+            on_exit=[move_group, rviz, start_manipulator_node],
         )
     )
 
@@ -190,5 +221,6 @@ def generate_launch_description():
         controller_manager,
         joint_state_broadcaster_spawner,
         start_arm_controller,
+        start_gripper_controller,
         start_moveit,
     ])
