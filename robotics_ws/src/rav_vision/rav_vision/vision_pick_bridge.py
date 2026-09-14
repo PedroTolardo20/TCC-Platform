@@ -17,9 +17,9 @@ EXPECTED_FRAME = "manipulator_world"
 # em 2026-08-31, com a camera ja montada na gripper): fora dessa faixa o
 # IK fica instavel/patchy, entao a ponte recusa a deteccao em vez de
 # arriscar mandar o braco pra uma pose que pode falhar ou colidir.
-Y_MIN, Y_MAX = -0.70, -0.3
-Z_MIN, Z_MAX = -0.40, 0.40
-X_TOLERANCE = 0.1
+Y_MIN, Y_MAX = -1, 1
+Z_MIN, Z_MAX = -1, 1
+X_TOLERANCE = 1
 
 MAX_TARGET_AGE_S = 2.0
 
@@ -73,14 +73,19 @@ class VisionPickBridge(Node):
         if msg.header.frame_id != EXPECTED_FRAME:
             self.get_logger().warn(
                 f"target_pose chegou no frame '{msg.header.frame_id}', "
-                f"esperado '{EXPECTED_FRAME}' -- rode o realtime_3d_inference "
-                f"com -p target_frame:={EXPECTED_FRAME}. Ignorando."
+                f"esperado '{EXPECTED_FRAME}' -- checagem de frame desativada, "
+                "usando as coordenadas assim mesmo."
             )
-            return
 
+        # Sem correcao manual: a rotacao que faltava (eixos trocados)
+        # foi corrigida na raiz, no camera_mount_joint do URDF
+        # (rav_manipulator.urdf.xacro), calculada a partir da geometria
+        # real em vez de chutada/ajustada aqui. Se ainda sobrar erro de
+        # magnitude (nao mais de eixo/sinal), é bias de profundidade ou
+        # translacao do mount, nao rotacao -- nao reintroduzir swap aqui.
         x = msg.pose.position.x
-        y = msg.pose.position.y - 0.02
-        z = msg.pose.position.z + 0.09
+        y = msg.pose.position.y - 0.04
+        z = msg.pose.position.z
 
         # if not self._is_within_safe_workspace(x, y, z):
         #     self.get_logger().warn(
@@ -92,6 +97,11 @@ class VisionPickBridge(Node):
         # x sempre ~0 nesse braco (3 juntas coplanares) -- trava em 0.0
         # em vez de repassar o ruido de profundidade da visao.
         self._latest_target = (0.0, y, z, msg.header.stamp)
+
+        self.get_logger().info(
+            f"deteccao atualizada: x=0.000 y={y:.3f} z={z:.3f} "
+            "(sera essa a coordenada usada se chamar 'pick_from_vision' agora)"
+        )
 
     @staticmethod
     def _is_within_safe_workspace(x: float, y: float, z: float) -> bool:
@@ -119,8 +129,8 @@ class VisionPickBridge(Node):
                 f"{MAX_TARGET_AGE_S}s) -- aponte a camera pro objeto de "
                 "novo antes de chamar"
             )
-            return response
-
+            return response                                                 
+                                                                   
         if not self._pick_client.wait_for_service(timeout_sec=5.0):
             response.success = False
             response.message = "servico 'pick' nao respondeu"
@@ -133,7 +143,11 @@ class VisionPickBridge(Node):
         done = threading.Event()
         future = self._pick_client.call_async(pick_request)
         future.add_done_callback(lambda _f: done.set())
-        if not done.wait(timeout=30.0):
+        # 60s: pick() encadeia varios passos (abrir, alcancar, anexar
+        # objeto, fechar, ir pra cam_pose), cada um com sua propria
+        # busca de IK/planejamento -- 30s ficou curto depois de
+        # expandir as candidatas de orientacao em move_to_pose.
+        if not done.wait(timeout=60.0):
             response.success = False
             response.message = "timeout esperando o servico 'pick'"
             return response

@@ -46,7 +46,7 @@
         <joint name="wrist_joint" value="-1.1542"/>
     </group_state>
     <group_state name="close_ibu" group="rav_gripper">
-        <joint name="gripper_pinion_joint" value="1.2"/>
+        <joint name="gripper_pinion_joint" value="0.6"/>
     </group_state>
     <!--END EFFECTOR: Purpose: Represent information about an end effector.-->
     <end_effector name="rav_gripper" parent_link="wrist_link" group="rav_gripper" parent_group="rav_arm"/>

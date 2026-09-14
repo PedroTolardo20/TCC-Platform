@@ -30,7 +30,7 @@ class RAVVision3D(Node):
         # ----------------------------
         self.declare_parameter("model_path", "")
         self.declare_parameter("imgsz", 512)
-        self.declare_parameter("conf", 0.25)
+        self.declare_parameter("conf", 0.75)
         self.declare_parameter("device", "cpu")
 
         # ----------------------------
@@ -55,6 +55,16 @@ class RAVVision3D(Node):
         self.declare_parameter("max_depth_m", 1.50)
         self.declare_parameter("roi_ratio", 0.50)
         self.declare_parameter("min_valid_depth_pixels", 30)
+
+        # Remendo rapido: o cy que o astra_camera_node publica no
+        # camera_info (172.3) esta bem longe do centro geometrico da
+        # imagem (240 pra 480px de altura) -- confirmado comparando
+        # position_camera_m com medida de regua (dava 10.5cm de erro em
+        # y pra um objeto a 4cm do eixo, e com cy~254 bate ~5cm). Ate
+        # rodar uma calibracao de verdade (camera_calibration + apontar
+        # color_info_url), sobrescreve aqui. -1 desliga o remendo e usa
+        # o cy do camera_info normalmente.
+        self.declare_parameter("cy_override", 253.92)
 
         # ----------------------------
         # TF e seleção do alvo
@@ -92,6 +102,9 @@ class RAVVision3D(Node):
         )
         self.min_valid_depth_pixels = int(
             self.get_parameter("min_valid_depth_pixels").value
+        )
+        self.cy_override = float(
+            self.get_parameter("cy_override").value
         )
 
         self.target_frame = str(
@@ -206,7 +219,11 @@ class RAVVision3D(Node):
         self.fx = float(msg.k[0])
         self.fy = float(msg.k[4])
         self.cx = float(msg.k[2])
-        self.cy = float(msg.k[5])
+        self.cy = (
+            self.cy_override
+            if self.cy_override >= 0.0
+            else float(msg.k[5])
+        )
 
     def synced_callback(self, color_msg: Image, depth_msg: Image):
         """
@@ -469,15 +486,34 @@ class RAVVision3D(Node):
             return point_camera
 
         try:
-            # O braço já está estabilizado em ready quando a detecção
-            # acontece. Usamos a transformação mais recente disponível
-            # para evitar extrapolação temporal entre câmera e joint_states.
-            transform = self.tf_buffer.lookup_transform(
-                self.target_frame,
-                point_camera.header.frame_id,
-                Time(),
-                timeout=Duration(seconds=0.20)
-            )
+            # A camera fica na ponta da gripper (se move com o braco), entao
+            # a transformacao camera->target muda a cada pose -- tem que
+            # usar a TF no instante exato da foto (header.stamp), nao "a
+            # mais recente disponivel". Antes usava Time() achando que o
+            # braco ficava parado (ready) durante a deteccao; com o braco
+            # em movimento isso dava posicao 3D errada, sem padrao fixo
+            # pra corrigir depois (confirmado: mesma formula de correcao
+            # batia numa deteccao e errava feio na proxima).
+            try:
+                transform = self.tf_buffer.lookup_transform(
+                    self.target_frame,
+                    point_camera.header.frame_id,
+                    Time.from_msg(point_camera.header.stamp),
+                    timeout=Duration(seconds=0.20)
+                )
+            except TransformException as exc:
+                self.get_logger().warn(
+                    f"TF no timestamp exato da deteccao indisponivel "
+                    f"({exc}), usando a mais recente disponivel como "
+                    "fallback (pode ficar impreciso se o braco estiver "
+                    "em movimento)."
+                )
+                transform = self.tf_buffer.lookup_transform(
+                    self.target_frame,
+                    point_camera.header.frame_id,
+                    Time(),
+                    timeout=Duration(seconds=0.20)
+                )
 
             point_target = tf2_geometry_msgs.do_transform_point(
                 point_camera,

@@ -14,7 +14,7 @@ class RAVVisionRealtime(Node):
         self.declare_parameter("model_path", "")
         self.declare_parameter("source", "0")
         self.declare_parameter("imgsz", 512)
-        self.declare_parameter("conf", 0.25)
+        self.declare_parameter("conf", 0.75)
         self.declare_parameter("device", "cpu")
 
         self.model_path = self.get_parameter("model_path").value

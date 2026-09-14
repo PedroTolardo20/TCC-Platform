@@ -547,6 +547,35 @@
       <origin xyz="0 -0.140 0.002" rpy="0 0 0"/>
     </joint>
 
+    <!-- Camera Astra (DaBai DCW) montada na ponta da gripper: 55mm em y e
+         40mm em z em relacao ao gripper_tcp (medido por Nathan). "camera_link"
+         precisa bater com o frame raiz publicado pelo astra_camera_node
+         (camera_name + "_link", default "camera_link") pra fechar a arvore de
+         TF entre a camera e o manipulador, sem isso o realtime_3d_inference
+         nunca consegue transformar as deteccoes pra manipulator_world.
+         Validado em 2026-09-12 com tf2_echo manipulator_world camera_link
+         vs medida de regua, braco parado: bateu (y dentro do erro de
+         regua, z exato), geometria da TRANSLACAO do mount esta certa.
+
+         Rotacao calculada em 2026-09-13 (nao mais chute rpy=0 0 0):
+         com o braco em cam_pose (shoulder+elbow+wrist ~= 0.036 rad, ou
+         seja quase sem rotacao acumulada do braco em si), comparamos
+         3 deteccoes reais (regua + move_to_pose manual) contra o que
+         o pipeline publicava em manipulator_world e vimos que faltava
+         exatamente uma rotacao de x,y,z -> z,-x,-y (matriz com
+         determinante +1, entao rotacao fisica valida, nao reflexo).
+         Isso corresponde a rpy = -90 0 -90 graus, coincide com a
+         mesma conversao fisico->optico que o driver da camera ja usa
+         entre camera_link e camera_color_optical_frame (conferido via
+         tf2_echo camera_link camera_color_optical_frame). -->
+    <link name="camera_link"/>
+
+    <joint name="camera_mount_joint" type="fixed">
+      <parent link="gripper_tcp"/>
+      <child link="camera_link"/>
+      <origin xyz="0 0.055 0.040" rpy="${-pi/2} 0 ${-pi/2}"/>
+    </joint>
+
     <!-- GenericSystem preservado para usos que instanciem a macro dessa forma. -->
     <xacro:if value="${use_fake_hardware}">
       <ros2_control name="RavManipulatorFakeSystem" type="system">

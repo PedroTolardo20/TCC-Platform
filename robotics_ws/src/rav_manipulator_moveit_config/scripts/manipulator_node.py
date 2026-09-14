@@ -12,6 +12,7 @@ sampler do OMPL falha em amostrar a regiao (tolerancia curta demais pra um
 braco de so 3 DOF), enquanto o IK direto resolve de primeira.
 """
 
+import math
 import threading
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -57,23 +58,32 @@ TOUCH_LINKS = [
 GRASP_OBJECT_ID = "grasped_object"
 DEFAULT_FRAME = "manipulator_world"
 
-# As 3 juntas do braco giram no mesmo eixo, entao o conjunto de
-# orientacoes alcancaveis do gripper_tcp e estreito -- travar uma
-# orientacao arbitraria junto com a posicao costuma falhar no IK
-# (confirmado testando: nem com boa semente, nem via OMPL puro-posicao
-# resolve de forma generica). Com free_orientation, tentamos essas
-# candidatas em ordem e usamos a primeira que o IK resolver: identidade
-# primeiro (alcanca uma regiao maior, comprovado empiricamente), depois
-# a "vertical" usada nos poses nomeados (home/ready/cad_reference).
+# As 3 juntas do braco giram no mesmo eixo, entao a orientacao do
+# gripper_tcp so tem 1 grau de liberdade real (rotacao acumulada em
+# torno desse eixo) -- pra cada posicao so uma faixa ESTREITA (as vezes
+# so uns 20 graus) dessa rotacao tem solucao de IK. Confirmado por
+# cinematica direta: um alvo que falhou com so identidade/90 graus tinha
+# solucao valida exatamente entre -164 e -143 graus, uma faixa que as
+# duas candidatas antigas nao cobriam. Por isso varremos o circulo
+# inteiro em passos de 15 graus (identidade primeiro, que cobre a
+# regiao mais comum) em vez de confiar em 1-2 chutes.
+def _rotation_about_arm_axis(degrees: float) -> Quaternion:
+    half = math.radians(degrees) / 2.0
+    return Quaternion(x=math.sin(half), y=0.0, z=0.0, w=math.cos(half))
+
+
 FREE_ORIENTATION_CANDIDATES = [
-    Quaternion(x=0.0, y=0.0, z=0.0, w=1.0),
-    Quaternion(x=0.710, y=0.0, z=0.0, w=0.704),
+    _rotation_about_arm_axis(deg) for deg in range(0, 360, 15)
 ]
 
 PLANNING_ATTEMPTS = 5
 PLANNING_TIME_S = 5.0
 GOAL_WAIT_TIMEOUT_S = PLANNING_TIME_S + 15.0
-IK_TIMEOUT_S = 2.0
+# Baixo de proposito: com 24 candidatas de orientacao agora tentadas em
+# sequencia (ver FREE_ORIENTATION_CANDIDATES), um timeout de 2s por
+# chute somaria ate 48s so nessa busca. O KDL falha rapido quando nao
+# ha solucao, entao 0.3s por tentativa e de sobra pro caso comum.
+IK_TIMEOUT_S = 0.3
 JOINT_TOLERANCE = 0.01
 
 
@@ -244,13 +254,16 @@ class RavManipulator(Node):
         ik_request.ik_request.pose_stamped.header.frame_id = frame_id
         ik_request.ik_request.pose_stamped.pose = pose
         ik_request.ik_request.timeout.sec = int(IK_TIMEOUT_S)
+        ik_request.ik_request.timeout.nanosec = int(
+            (IK_TIMEOUT_S - int(IK_TIMEOUT_S)) * 1e9
+        )
         ik_request.ik_request.avoid_collisions = True
 
         if not self._ik_client.wait_for_service(timeout_sec=5.0):
             return False, "compute_ik nao respondeu (servico indisponivel)"
 
         response = self._wait_for_future(
-            self._ik_client.call_async(ik_request), IK_TIMEOUT_S + 5.0
+            self._ik_client.call_async(ik_request), IK_TIMEOUT_S + 1.0
         )
         if response is None:
             return False, "timeout esperando o compute_ik"

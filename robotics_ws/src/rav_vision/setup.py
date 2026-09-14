@@ -18,7 +18,6 @@ setup(
     zip_safe=True,
     description='Treinamento e validacao de datasets com YOLO26 no ROS 2 Humble.',
     license='MIT',
-    tests_require=['pytest'],
     entry_points={
         'console_scripts': [
             'realtime_inference = rav_vision.realtime_inference:main',
