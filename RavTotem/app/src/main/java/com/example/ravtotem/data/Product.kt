@@ -16,8 +16,7 @@ fun formatarPreco(centavos: Int): String =
     "R$ " + "%.2f".format(Locale.US, centavos / 100.0).replace(".", ",")
 
 val mockProducts = listOf(
-    Product(1, "Dipirona 1g, 20 comprimidos", 890, R.drawable.dipirona),
-    Product(2, "Paracetamol 750mg, 20 comprimidos", 1250, R.drawable.paracetamol),
-    Product(3, "Ibuprofeno 400mg, 10 comprimidos", 1590, R.drawable.ibuprofeno),
-    Product(4, "Vitamina C 1g efervescente", 2200, R.drawable.vitamina_c)
+    Product(1, "Ibuprotrat 400mg, 20 comprimidos", 1390, R.drawable.ibuprotrat),
+    Product(2, "Maxalgina 1g, 10 comprimidos", 990, R.drawable.maxalgina),
+    Product(3, "Aciclovir 200mg, 25 comprimidos", 1790, R.drawable.aciclovir)
 )

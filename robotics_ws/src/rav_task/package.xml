@@ -1,28 +1,20 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>rav_vision</name>
+  <name>rav_task</name>
   <version>0.1.0</version>
-  <description>Pacote ROS 2 Humble para treinamento e validacao de datasets com Ultralytics YOLO26.</description>
-  <maintainer email="flomaidar@gmail.com">Flora Aidar</maintainer>
+  <description>Orquestra pick-and-place do RAF: ponte WebSocket com o RavPlatform (Temi) e chamada dos serviços de visão/manipulação já existentes.</description>
+  <maintainer email="nathanconconi24@gmail.com">RAV TCC</maintainer>
   <license>MIT</license>
 
   <buildtool_depend>ament_python</buildtool_depend>
 
   <exec_depend>ament_index_python</exec_depend>
   <exec_depend>python3-pip</exec_depend>
-  <exec_depend>python3-yaml</exec_depend>
 
-  <exec_depend>cv_bridge</exec_depend>
-  <exec_depend>geometry_msgs</exec_depend>
-  <exec_depend>message_filters</exec_depend>
-  <exec_depend>rav_manipulator_moveit_config</exec_depend>
-  <exec_depend>rcl_interfaces</exec_depend>
-  <exec_depend>sensor_msgs</exec_depend>
-  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>rclpy</exec_depend>
   <exec_depend>std_srvs</exec_depend>
-  <exec_depend>tf2_geometry_msgs</exec_depend>
-  <exec_depend>tf2_ros</exec_depend>
+  <exec_depend>rav_manipulator_moveit_config</exec_depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>

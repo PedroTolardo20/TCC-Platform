@@ -1,5 +1,6 @@
 package com.example.ravplatform.network
 
+import com.example.ravplatform.data.PONTO_ENTREGA
 import com.example.ravplatform.data.localDoProduto
 import com.example.ravplatform.nav.NavegacaoController
 import org.java_websocket.WebSocket
@@ -53,7 +54,7 @@ class RavWebSocketServer(
 
         enviarStatus("recebido")
         onLog("Navegando para ${local.pontoNavegacao} (YOLO: ${local.classeYolo})")
-        navegacao.executarPedido(local.pontoNavegacao) { etapa ->
+        navegacao.executarPedido(local.pontoNavegacao, local.classeYolo, PONTO_ENTREGA) { etapa ->
             enviarStatus(etapa)
         }
     }

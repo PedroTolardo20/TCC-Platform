@@ -8,6 +8,7 @@ import message_filters
 
 from cv_bridge import CvBridge
 from geometry_msgs.msg import PointStamped, PoseStamped
+from rcl_interfaces.msg import SetParametersResult
 from rclpy.duration import Duration
 from rclpy.node import Node
 from rclpy.time import Time
@@ -117,6 +118,13 @@ class RAVVision3D(Node):
             self.get_parameter("visualize").value
         )
 
+        # target_class precisa poder mudar em tempo real (o start_task troca
+        # por pedido, via /rav_vision_3d/set_parameters) -- sem esse
+        # callback o valor lido acima ficava congelado pro resto da
+        # execução e o filtro de classe em synced_callback nunca via a
+        # mudança.
+        self.add_on_set_parameters_callback(self._on_parameter_change)
+
         if not self.model_path:
             raise ValueError(
                 "Informe model_path com o caminho do best_50epochs.pt"
@@ -200,6 +208,15 @@ class RAVVision3D(Node):
         self.get_logger().info(f"RGB: {self.color_topic}")
         self.get_logger().info(f"Depth: {self.depth_topic}")
         self.get_logger().info(f"CameraInfo: {self.camera_info_topic}")
+
+    def _on_parameter_change(self, params):
+        for param in params:
+            if param.name == "target_class":
+                self.target_class = str(param.value)
+                self.get_logger().info(
+                    f"target_class atualizado para '{self.target_class}'"
+                )
+        return SetParametersResult(successful=True)
 
     def camera_info_callback(self, msg: CameraInfo):
         """
