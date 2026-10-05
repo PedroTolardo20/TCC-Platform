@@ -4,12 +4,13 @@ import android.util.Log
 import com.example.ravplatform.network.StartTaskClient
 import com.robotemi.sdk.Robot
 import com.robotemi.sdk.listeners.OnGoToLocationStatusChangedListener
+import com.robotemi.sdk.listeners.OnMovementStatusChangedListener
 import com.robotemi.sdk.listeners.OnRobotReadyListener
 
 // URL do servidor WebSocket do start_task (Linux/ROS2), aberto pelo
 // start_task.launch.py na porta 8766. TROCAR pelo IP real do computador do
 // robô na rede local antes de rodar de verdade.
-private const val URL_START_TASK = "ws://SEU_IP_DO_LINUX:8766"
+private const val URL_START_TASK = "ws://172.20.10.4:8766"
 
 private enum class Fase {
     OCIOSO, INDO_COLETA, COLETANDO, INDO_ENTREGA, ENTREGANDO
@@ -28,9 +29,13 @@ private enum class Fase {
 class TemiNavegacao :
     NavegacaoController,
     OnGoToLocationStatusChangedListener,
+    OnMovementStatusChangedListener,
     OnRobotReadyListener {
 
     private val robot: Robot = Robot.getInstance()
+
+    // Giro pedido pelo start_task pra alinhar o objeto com o braço.
+    private var girando = false
 
     private var pontoAtual: String? = null
     private var onEtapaAtual: ((String) -> Unit)? = null
@@ -44,6 +49,7 @@ class TemiNavegacao :
     init {
         robot.addOnRobotReadyListener(this)
         robot.addOnGoToLocationStatusChangedListener(this)
+        robot.addOnMovementStatusChangedListener(this)
     }
 
     override fun executarPedido(
@@ -120,8 +126,37 @@ class TemiNavegacao :
                 if (sucesso) reportar("concluido") else falhar("place falhou: $mensagem")
                 encerrarStartTask()
             },
+            onGirarBase = { graus -> girarBase(graus) },
             onErro = { mensagem -> falhar("start_task: $mensagem") }
         ).apply { connect() }
+    }
+
+    // Gira o Temi no lugar (positivo = anti-horário) e responde
+    // giro_concluido quando o turnBy terminar -- ver onMovementStatusChanged.
+    private fun girarBase(graus: Int) {
+        if (graus == 0) {
+            startTask?.enviarGiroConcluido(true, "giro de 0 graus ignorado")
+            return
+        }
+        Log.d(TAG, "Girando base $graus graus para alinhar o objeto")
+        girando = true
+        robot.turnBy(graus, VELOCIDADE_GIRO)
+    }
+
+    override fun onMovementStatusChanged(type: String, status: String) {
+        if (!girando || type != OnMovementStatusChangedListener.TYPE_TURN_BY) return
+        Log.d(TAG, "Status turnBy: $status")
+
+        when (status) {
+            OnMovementStatusChangedListener.STATUS_COMPLETE -> {
+                girando = false
+                startTask?.enviarGiroConcluido(true, "ok")
+            }
+            OnMovementStatusChangedListener.STATUS_ABORT -> {
+                girando = false
+                startTask?.enviarGiroConcluido(false, "turnBy abortado")
+            }
+        }
     }
 
     private fun irParaEntrega() {
@@ -164,11 +199,15 @@ class TemiNavegacao :
     /** Chamar quando o servidor for desligado, para remover os listeners. */
     fun encerrar() {
         robot.removeOnGoToLocationStatusChangedListener(this)
+        robot.removeOnMovementStatusChangedListener(this)
         robot.removeOnRobotReadyListener(this)
         encerrarStartTask()
     }
 
     companion object {
         private const val TAG = "TemiNavegacao"
+
+        // Devagar de propósito: giros pequenos (poucos graus) de alinhamento.
+        private const val VELOCIDADE_GIRO = 0.5f
     }
 }

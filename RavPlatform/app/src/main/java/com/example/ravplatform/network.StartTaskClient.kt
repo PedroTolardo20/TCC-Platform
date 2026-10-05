@@ -15,6 +15,9 @@ class StartTaskClient(
     private val onLog: (String) -> Unit,
     private val onPickConcluido: (Boolean, String) -> Unit,
     private val onPlaceConcluido: (Boolean, String) -> Unit,
+    // start_task pede pra girar a base (graus, positivo = anti-horário) até
+    // o objeto ficar alinhado com o braço; responder com enviarGiroConcluido.
+    private val onGirarBase: (Int) -> Unit,
     private val onErro: (String) -> Unit
 ) : WebSocketClient(URI(urlServidor)) {
 
@@ -37,6 +40,7 @@ class StartTaskClient(
             "place_concluido" -> onPlaceConcluido(
                 json.optBoolean("success"), json.optString("mensagem")
             )
+            "girar_base" -> onGirarBase(json.optInt("graus"))
         }
     }
 
@@ -52,6 +56,14 @@ class StartTaskClient(
 
     fun enviarChegouPlace() {
         enviar(JSONObject().apply { put("tipo", "chegou_place") })
+    }
+
+    fun enviarGiroConcluido(sucesso: Boolean, mensagem: String) {
+        enviar(JSONObject().apply {
+            put("tipo", "giro_concluido")
+            put("success", sucesso)
+            put("mensagem", mensagem)
+        })
     }
 
     private fun enviar(json: JSONObject) {
