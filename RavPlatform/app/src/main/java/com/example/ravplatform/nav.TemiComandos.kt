@@ -37,6 +37,9 @@ class TemiComandos :
     private var posicaoAtual: Position? = null
     private var inicioAndar: Position? = null
     private var metrosAlvo = 0f
+    private var velocidadeAndar = VELOCIDADE_ANDAR_PADRAO
+    private var antecipacaoAndar = 0f
+    private var porTempo = false
     private var prazoAndar = 0L
 
     init {
@@ -64,8 +67,22 @@ class TemiComandos :
         robot.turnBy(graus, VELOCIDADE_GIRO)
     }
 
-    /** Anda 'metros' para frente (sentido para onde o Temi está virado). */
-    fun andarFrente(metros: Float, onFim: (Boolean, String) -> Unit) {
+    /**
+     * Anda 'metros' para frente (sentido para onde o Temi está virado).
+     * A posição do Temi chega atrasada e ele ainda desliza depois do
+     * stopMovement, então:
+     *  - duracaoS > 0: anda por tempo (distância curta, onde a posição
+     *    atrasada não dá pra usar);
+     *  - senão: para 'antecipacao' metros antes do alvo pela odometria.
+     * Os dois parâmetros são calibrados do lado do Linux (teste_alinhamento.py).
+     */
+    fun andarFrente(
+        metros: Float,
+        velocidade: Float,
+        antecipacao: Float,
+        duracaoS: Float,
+        onFim: (Boolean, String) -> Unit
+    ) {
         if (!iniciar(onFim)) return
         if (metros <= 0f) {
             terminar(true, "distância 0 ignorada")
@@ -78,22 +95,44 @@ class TemiComandos :
         }
         inicioAndar = inicio
         metrosAlvo = metros
-        prazoAndar = System.currentTimeMillis() +
+        velocidadeAndar = velocidade.coerceIn(0.05f, 1f)
+        antecipacaoAndar = antecipacao.coerceAtLeast(0f)
+        porTempo = duracaoS > 0f
+        prazoAndar = System.currentTimeMillis() + if (porTempo) {
+            (duracaoS * 1000).toLong()
+        } else {
             ((metros / VELOCIDADE_ANDAR_MIN_M_S) * 1000).toLong() + 3000
-        Log.d(TAG, "andar $metros m a partir de (${inicio.x}, ${inicio.y})")
+        }
+        Log.d(TAG, "andar $metros m (vel $velocidadeAndar, antecipação $antecipacaoAndar, " +
+            "duração ${duracaoS}s) a partir de (${inicio.x}, ${inicio.y})")
         handler.post(passoAndar)
     }
 
     private val passoAndar = object : Runnable {
         override fun run() {
             val inicio = inicioAndar ?: return
-            val atual = posicaoAtual ?: inicio
-            val andado = hypot(atual.x - inicio.x, atual.y - inicio.y)
+            val andado = distanciaDesde(inicio)
+
+            val chegou = if (porTempo) {
+                System.currentTimeMillis() >= prazoAndar
+            } else {
+                andado >= metrosAlvo - antecipacaoAndar - TOLERANCIA_ANDAR_M
+            }
 
             when {
-                andado >= metrosAlvo - TOLERANCIA_ANDAR_M -> {
+                chegou -> {
                     pararAndar()
-                    terminar(true, "andou %.3f m (pedido %.3f m)".format(andado, metrosAlvo))
+                    // Espera o Temi assentar e a posição atualizar pra medir
+                    // onde ele realmente parou -- é esse número que serve
+                    // pra calibrar a antecipação.
+                    handler.postDelayed({
+                        val distFinal = distanciaDesde(inicio)
+                        terminar(
+                            true,
+                            "parou com %.3f m, final %.3f m (pedido %.3f m)"
+                                .format(andado, distFinal, metrosAlvo)
+                        )
+                    }, ESPERA_ASSENTAR_MS)
                 }
                 System.currentTimeMillis() > prazoAndar -> {
                     pararAndar()
@@ -101,11 +140,16 @@ class TemiComandos :
                 }
                 else -> {
                     // skidJoy só vale por um instante: tem que ser repetido.
-                    robot.skidJoy(VELOCIDADE_ANDAR, 0f)
+                    robot.skidJoy(velocidadeAndar, 0f)
                     handler.postDelayed(this, PERIODO_SKIDJOY_MS)
                 }
             }
         }
+    }
+
+    private fun distanciaDesde(inicio: Position): Float {
+        val atual = posicaoAtual ?: inicio
+        return hypot(atual.x - inicio.x, atual.y - inicio.y)
     }
 
     private fun pararAndar() {
@@ -178,9 +222,9 @@ class TemiComandos :
         private const val TAG = "TemiComandos"
         private const val VELOCIDADE_GIRO = 0.5f
 
-        // skidJoy vai de -1 a 1; baixo pra não passar do ponto em
-        // distâncias de poucos centímetros.
-        private const val VELOCIDADE_ANDAR = 0.2f
+        // skidJoy vai de -1 a 1. Padrão se o comando não mandar velocidade.
+        const val VELOCIDADE_ANDAR_PADRAO = 0.2f
+        private const val ESPERA_ASSENTAR_MS = 2000L
         // Usado só pro timeout (estimativa conservadora da velocidade real).
         private const val VELOCIDADE_ANDAR_MIN_M_S = 0.03f
         private const val PERIODO_SKIDJOY_MS = 100L

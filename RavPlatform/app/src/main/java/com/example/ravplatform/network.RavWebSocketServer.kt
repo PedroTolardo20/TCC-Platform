@@ -68,6 +68,7 @@ class RavWebSocketServer(
     }
 
     // {"tipo":"comando","comando":"ir_para"|"girar"|"andar", "local"/"graus"/"metros"}
+    // ("andar" aceita também "velocidade", "antecipacao_m" e "duracao_s", opcionais)
     // -> responde {"tipo":"comando_concluido","comando":...,"success":...,"mensagem":...}
     private fun executarComando(conn: WebSocket, json: JSONObject) {
         val comando = json.optString("comando")
@@ -92,7 +93,15 @@ class RavWebSocketServer(
         when (comando) {
             "ir_para" -> executor.irPara(json.optString("local"), ::responder)
             "girar" -> executor.girar(json.optInt("graus"), ::responder)
-            "andar" -> executor.andarFrente(json.optDouble("metros", 0.0).toFloat(), ::responder)
+            "andar" -> executor.andarFrente(
+                metros = json.optDouble("metros", 0.0).toFloat(),
+                velocidade = json.optDouble(
+                    "velocidade", TemiComandos.VELOCIDADE_ANDAR_PADRAO.toDouble()
+                ).toFloat(),
+                antecipacao = json.optDouble("antecipacao_m", 0.0).toFloat(),
+                duracaoS = json.optDouble("duracao_s", 0.0).toFloat(),
+                onFim = ::responder
+            )
             else -> responder(false, "comando desconhecido: '$comando'")
         }
     }
