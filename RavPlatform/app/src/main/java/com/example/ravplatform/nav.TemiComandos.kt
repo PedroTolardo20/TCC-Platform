@@ -8,8 +8,10 @@ import com.robotemi.sdk.listeners.OnGoToLocationStatusChangedListener
 import com.robotemi.sdk.listeners.OnMovementStatusChangedListener
 import com.robotemi.sdk.navigation.listener.OnCurrentPositionChangedListener
 import com.robotemi.sdk.navigation.model.Position
+import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.hypot
+import kotlin.math.roundToInt
 
 /**
  * Comandos de movimento avulsos do Temi, disparados pelo Linux via
@@ -41,6 +43,15 @@ class TemiComandos :
     private var antecipacaoAndar = 0f
     private var porTempo = false
     private var prazoAndar = 0L
+    // Manter rumo enquanto anda: yaw absoluto (rad, mapa) a seguir, e ganho
+    // rad de erro -> comando angular do skidJoy. NaN = não corrige.
+    private var yawRumo = Float.NaN
+    private var ganhoRumo = 0f
+
+    // Girar até um yaw absoluto do mapa (malha fechada: turnBy + confere).
+    private var girandoPara = false
+    private var yawAlvo = 0f
+    private var tentativasGiro = 0
 
     init {
         robot.addOnGoToLocationStatusChangedListener(this)
@@ -67,6 +78,52 @@ class TemiComandos :
         robot.turnBy(graus, VELOCIDADE_GIRO)
     }
 
+    /** Pose atual no mapa (x, y em m; yaw em rad), ou null se ainda não chegou. */
+    fun poseAtual(): Position? = posicaoAtual
+
+    /**
+     * Gira até o yaw ABSOLUTO 'yawRad' do mapa: turnBy pelo erro, espera a
+     * pose atualizar, confere e repete até |erro| <= TOLERANCIA_GIRO_GRAUS.
+     * Diferente do girar(): não acumula erro de giros anteriores.
+     */
+    fun girarPara(yawRad: Float, onFim: (Boolean, String) -> Unit) {
+        if (!iniciar(onFim)) return
+        if (posicaoAtual == null) {
+            terminar(false, "posição do Temi ainda desconhecida (mapa carregado?)")
+            return
+        }
+        yawAlvo = yawRad
+        tentativasGiro = 0
+        girandoPara = true
+        handler.post(passoGirarPara)
+    }
+
+    private val passoGirarPara = Runnable {
+        val yaw = posicaoAtual?.yaw ?: return@Runnable
+        val erroGraus = Math.toDegrees(normalizar(yawAlvo - yaw).toDouble()).toFloat()
+        when {
+            abs(erroGraus) <= TOLERANCIA_GIRO_GRAUS -> {
+                girandoPara = false
+                terminar(true, "yaw %.4f rad (alvo %.4f, erro %.1f°, %d giro(s))"
+                    .format(yaw, yawAlvo, erroGraus, tentativasGiro))
+            }
+            tentativasGiro >= MAX_TENTATIVAS_GIRO -> {
+                girandoPara = false
+                terminar(false, "não chegou no yaw alvo: erro %.1f° após %d giros"
+                    .format(erroGraus, tentativasGiro))
+            }
+            else -> {
+                tentativasGiro++
+                // turnBy só aceita graus inteiros; erro < 1° arredondaria pra 0.
+                var graus = erroGraus.roundToInt()
+                if (graus == 0) graus = if (erroGraus > 0) 1 else -1
+                Log.d(TAG, "girarPara: erro $erroGraus° -> turnBy($graus)")
+                girando = true
+                robot.turnBy(graus, VELOCIDADE_GIRO)
+            }
+        }
+    }
+
     /**
      * Anda 'metros' para frente (sentido para onde o Temi está virado).
      * A posição do Temi chega atrasada e ele ainda desliza depois do
@@ -81,6 +138,8 @@ class TemiComandos :
         velocidade: Float,
         antecipacao: Float,
         duracaoS: Float,
+        yawRumo: Float,
+        ganhoRumo: Float,
         onFim: (Boolean, String) -> Unit
     ) {
         if (!iniciar(onFim)) return
@@ -98,6 +157,8 @@ class TemiComandos :
         velocidadeAndar = velocidade.coerceIn(0.05f, 1f)
         antecipacaoAndar = antecipacao.coerceAtLeast(0f)
         porTempo = duracaoS > 0f
+        this.yawRumo = yawRumo
+        this.ganhoRumo = ganhoRumo
         prazoAndar = System.currentTimeMillis() + if (porTempo) {
             (duracaoS * 1000).toLong()
         } else {
@@ -138,13 +199,43 @@ class TemiComandos :
                     pararAndar()
                     terminar(false, "timeout andando: %.3f de %.3f m".format(andado, metrosAlvo))
                 }
+                desviouDoRumo() -> {
+                    pararAndar()
+                    terminar(false, "desviou mais de %.0f° do rumo andando -- sinal do ganho_rumo invertido?"
+                        .format(DESVIO_MAX_RUMO_GRAUS))
+                }
                 else -> {
                     // skidJoy só vale por um instante: tem que ser repetido.
-                    robot.skidJoy(velocidadeAndar, 0f)
+                    robot.skidJoy(velocidadeAndar, correcaoRumo())
                     handler.postDelayed(this, PERIODO_SKIDJOY_MS)
                 }
             }
         }
+    }
+
+    private fun erroRumo(): Float? {
+        if (yawRumo.isNaN()) return null
+        val yaw = posicaoAtual?.yaw ?: return null
+        return normalizar(yawRumo - yaw)
+    }
+
+    /** Comando angular do skidJoy pra voltar pro rumo (proporcional, limitado). */
+    private fun correcaoRumo(): Float {
+        val erro = erroRumo() ?: return 0f
+        return (ganhoRumo * erro).coerceIn(-ANGULAR_MAX_RUMO, ANGULAR_MAX_RUMO)
+    }
+
+    private fun desviouDoRumo(): Boolean {
+        val erro = erroRumo() ?: return false
+        return abs(Math.toDegrees(erro.toDouble())) > DESVIO_MAX_RUMO_GRAUS
+    }
+
+    /** Ângulo em (-pi, pi]. */
+    private fun normalizar(rad: Float): Float {
+        var a = rad
+        while (a > PI) a -= (2 * PI).toFloat()
+        while (a <= -PI) a += (2 * PI).toFloat()
+        return a
     }
 
     private fun distanciaDesde(inicio: Position): Float {
@@ -186,10 +277,16 @@ class TemiComandos :
         when (status) {
             OnMovementStatusChangedListener.STATUS_COMPLETE -> {
                 girando = false
-                terminar(true, "giro concluído")
+                if (girandoPara) {
+                    // Espera a pose do mapa refletir o giro antes de conferir.
+                    handler.postDelayed(passoGirarPara, ESPERA_YAW_MS)
+                } else {
+                    terminar(true, "giro concluído")
+                }
             }
             OnMovementStatusChangedListener.STATUS_ABORT -> {
                 girando = false
+                girandoPara = false
                 terminar(false, "turnBy abortado")
             }
         }
@@ -229,5 +326,11 @@ class TemiComandos :
         private const val VELOCIDADE_ANDAR_MIN_M_S = 0.03f
         private const val PERIODO_SKIDJOY_MS = 100L
         private const val TOLERANCIA_ANDAR_M = 0.005f
+
+        private const val TOLERANCIA_GIRO_GRAUS = 1.0f
+        private const val MAX_TENTATIVAS_GIRO = 5
+        private const val ESPERA_YAW_MS = 800L
+        private const val ANGULAR_MAX_RUMO = 0.3f
+        private const val DESVIO_MAX_RUMO_GRAUS = 15.0
     }
 }

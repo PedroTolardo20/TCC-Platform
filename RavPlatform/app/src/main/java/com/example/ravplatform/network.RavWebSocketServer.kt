@@ -67,8 +67,10 @@ class RavWebSocketServer(
         }
     }
 
-    // {"tipo":"comando","comando":"ir_para"|"girar"|"andar", "local"/"graus"/"metros"}
-    // ("andar" aceita também "velocidade", "antecipacao_m" e "duracao_s", opcionais)
+    // {"tipo":"comando","comando":"ir_para"|"girar"|"girar_para"|"andar"|"pose", ...}
+    //  ir_para: "local"; girar: "graus" (relativo); girar_para: "yaw" (rad, absoluto
+    //  no mapa); andar: "metros" + opcionais "velocidade", "antecipacao_m",
+    //  "duracao_s", "yaw_rumo" (rad) e "ganho_rumo"; pose: devolve x, y, yaw.
     // -> responde {"tipo":"comando_concluido","comando":...,"success":...,"mensagem":...}
     private fun executarComando(conn: WebSocket, json: JSONObject) {
         val comando = json.optString("comando")
@@ -93,6 +95,23 @@ class RavWebSocketServer(
         when (comando) {
             "ir_para" -> executor.irPara(json.optString("local"), ::responder)
             "girar" -> executor.girar(json.optInt("graus"), ::responder)
+            "pose" -> {
+                val pose = executor.poseAtual()
+                val resp = JSONObject().apply {
+                    put("tipo", "comando_concluido")
+                    put("comando", comando)
+                    put("success", pose != null)
+                    put("mensagem", if (pose != null) "ok" else "posição ainda desconhecida")
+                    if (pose != null) {
+                        put("x", pose.x.toDouble())
+                        put("y", pose.y.toDouble())
+                        put("yaw", pose.yaw.toDouble())
+                    }
+                }
+                conn.send(resp.toString())
+                onLog("Enviado: $resp")
+            }
+            "girar_para" -> executor.girarPara(json.optDouble("yaw").toFloat(), ::responder)
             "andar" -> executor.andarFrente(
                 metros = json.optDouble("metros", 0.0).toFloat(),
                 velocidade = json.optDouble(
@@ -100,6 +119,8 @@ class RavWebSocketServer(
                 ).toFloat(),
                 antecipacao = json.optDouble("antecipacao_m", 0.0).toFloat(),
                 duracaoS = json.optDouble("duracao_s", 0.0).toFloat(),
+                yawRumo = json.optDouble("yaw_rumo", Double.NaN).toFloat(),
+                ganhoRumo = json.optDouble("ganho_rumo", 0.0).toFloat(),
                 onFim = ::responder
             )
             else -> responder(false, "comando desconhecido: '$comando'")
