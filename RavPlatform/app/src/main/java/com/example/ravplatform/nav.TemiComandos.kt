@@ -8,6 +8,7 @@ import com.robotemi.sdk.listeners.OnGoToLocationStatusChangedListener
 import com.robotemi.sdk.listeners.OnMovementStatusChangedListener
 import com.robotemi.sdk.navigation.listener.OnCurrentPositionChangedListener
 import com.robotemi.sdk.navigation.model.Position
+import com.robotemi.sdk.navigation.model.SafetyLevel
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.hypot
@@ -47,6 +48,9 @@ class TemiComandos :
     // rad de erro -> comando angular do skidJoy. NaN = não corrige.
     private var yawRumo = Float.NaN
     private var ganhoRumo = 0f
+    // Segurança de navegação original, restaurada quando o andar termina
+    // (null = o andar não mexeu nela).
+    private var segurancaOriginal: SafetyLevel? = null
 
     // Girar até um yaw absoluto do mapa (malha fechada: turnBy + confere).
     private var girandoPara = false
@@ -82,6 +86,16 @@ class TemiComandos :
 
     /** Pose atual no mapa (x, y em m; yaw em rad), ou null se desconhecida. */
     fun poseAtual(): Position? = poseAgora()
+
+    fun distanciaMinimaObstaculo(): Int = robot.minimumObstacleDistance
+
+    /** Retorna o código de retorno do serviço do Temi (0 = ok, se seguir o padrão). */
+    fun definirDistanciaMinimaObstaculo(cm: Int): Int {
+        robot.minimumObstacleDistance = cm
+        return robot.minimumObstacleDistance
+    }
+
+    fun seguranca(): String = try { robot.navigationSafety.toString() } catch (e: Exception) { "?" }
 
     /**
      * Consulta a pose direto no serviço do Temi (getPosition). O listener
@@ -176,6 +190,7 @@ class TemiComandos :
         duracaoS: Float,
         yawRumo: Float,
         ganhoRumo: Float,
+        segurancaTemporaria: String?,
         onFim: (Boolean, String) -> Unit
     ) {
         if (!iniciar(onFim)) return
@@ -195,6 +210,18 @@ class TemiComandos :
         porTempo = duracaoS > 0f
         this.yawRumo = yawRumo
         this.ganhoRumo = ganhoRumo
+        if (!segurancaTemporaria.isNullOrEmpty()) {
+            // Em HIGH o Temi se recusa a andar em direção à prateleira
+            // (andou 4 mm de 15 cm pedidos); só o avanço final pede isso.
+            try {
+                val nivel = SafetyLevel.valueOf(segurancaTemporaria.uppercase())
+                segurancaOriginal = robot.navigationSafety
+                robot.navigationSafety = nivel
+                Log.d(TAG, "segurança $segurancaOriginal -> $nivel durante o andar")
+            } catch (e: Exception) {
+                Log.w(TAG, "segurança '$segurancaTemporaria' inválida: ${e.message}")
+            }
+        }
         prazoAndar = System.currentTimeMillis() + if (porTempo) {
             (duracaoS * 1000).toLong()
         } else {
@@ -283,6 +310,11 @@ class TemiComandos :
         handler.removeCallbacks(passoAndar)
         inicioAndar = null
         robot.stopMovement()
+        segurancaOriginal?.let {
+            robot.navigationSafety = it
+            Log.d(TAG, "segurança restaurada para $it")
+        }
+        segurancaOriginal = null
     }
 
     override fun onCurrentPositionChanged(position: Position) {

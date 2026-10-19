@@ -70,7 +70,9 @@ class RavWebSocketServer(
     // {"tipo":"comando","comando":"ir_para"|"girar"|"girar_para"|"andar"|"pose", ...}
     //  ir_para: "local"; girar: "graus" (relativo); girar_para: "yaw" (rad, absoluto
     //  no mapa) + opcionais "tolerancia_graus" (1) e "aceitar_graus" (3); andar: "metros" + opcionais "velocidade", "antecipacao_m",
-    //  "duracao_s", "yaw_rumo" (rad) e "ganho_rumo"; pose: devolve x, y, yaw.
+    //  "duracao_s", "yaw_rumo" (rad), "ganho_rumo" e "seguranca" (DEFAULT/MEDIUM/HIGH,
+    //  só durante o andar); pose: devolve x, y, yaw; obstaculo: lê/define ("cm")
+    //  a distância mínima a obstáculos e mostra a segurança atual.
     // -> responde {"tipo":"comando_concluido","comando":...,"success":...,"mensagem":...}
     private fun executarComando(conn: WebSocket, json: JSONObject) {
         val comando = json.optString("comando")
@@ -112,6 +114,27 @@ class RavWebSocketServer(
                 conn.send(resp.toString())
                 onLog("Enviado: $resp")
             }
+            "obstaculo" -> {
+                // Lê (e, se vier "cm", altera) a distância mínima a obstáculos
+                // do Temi -- perto da prateleira ela pode bloquear o andar.
+                val antes = try { executor.distanciaMinimaObstaculo() } catch (e: Exception) { -999 }
+                val ret = if (json.has("cm")) {
+                    try { executor.definirDistanciaMinimaObstaculo(json.getInt("cm")) } catch (e: Exception) { -999 }
+                } else null
+                val depois = try { executor.distanciaMinimaObstaculo() } catch (e: Exception) { -999 }
+                val resp = JSONObject().apply {
+                    put("tipo", "comando_concluido")
+                    put("comando", comando)
+                    put("success", true)
+                    put("mensagem", "distância mínima: antes=$antes depois=$depois ret=$ret")
+                    put("antes", antes)
+                    put("depois", depois)
+                    put("ret", ret ?: JSONObject.NULL)
+                    put("seguranca", executor.seguranca())
+                }
+                conn.send(resp.toString())
+                onLog("Enviado: $resp")
+            }
             "girar_para" -> executor.girarPara(
                 yawRad = json.optDouble("yaw").toFloat(),
                 toleranciaGraus = json.optDouble("tolerancia_graus", 1.0).toFloat(),
@@ -127,6 +150,7 @@ class RavWebSocketServer(
                 duracaoS = json.optDouble("duracao_s", 0.0).toFloat(),
                 yawRumo = json.optDouble("yaw_rumo", Double.NaN).toFloat(),
                 ganhoRumo = json.optDouble("ganho_rumo", 0.0).toFloat(),
+                segurancaTemporaria = json.optString("seguranca", "").ifEmpty { null },
                 onFim = ::responder
             )
             else -> responder(false, "comando desconhecido: '$comando'")
