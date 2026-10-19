@@ -19,6 +19,7 @@ setup(
     entry_points={
         'console_scripts': [
             'start_task = rav_task.start_task:main',
+            'teste_alinhamento = rav_task.teste_alinhamento:main',
         ],
     },
 )

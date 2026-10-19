@@ -26,6 +26,20 @@ def generate_launch_description():
         description="Segundos de espera em cam_pose antes de confiar na detecção.",
     )
 
+    align_tolerance_arg = DeclareLaunchArgument(
+        "align_tolerance_m", default_value="0.02",
+        description="Gira a base enquanto |x| da detecção passar disso (m).",
+    )
+    base_axis_offset_arg = DeclareLaunchArgument(
+        "base_axis_offset_m", default_value="0.0",
+        description="Distância do eixo de giro do Temi até manipulator_world, "
+                    "na direção de alcance do braço (m) -- medir.",
+    )
+    turn_sign_arg = DeclareLaunchArgument(
+        "turn_sign", default_value="1",
+        description="1 ou -1: inverte o sentido do giro se a base girar pro lado errado.",
+    )
+
     start_task = Node(
         package="rav_task",
         executable="start_task",
@@ -35,6 +49,9 @@ def generate_launch_description():
             "place_x": LaunchConfiguration("place_x"),
             "place_y": LaunchConfiguration("place_y"),
             "cam_pose_settle_s": LaunchConfiguration("cam_pose_settle_s"),
+            "align_tolerance_m": LaunchConfiguration("align_tolerance_m"),
+            "base_axis_offset_m": LaunchConfiguration("base_axis_offset_m"),
+            "turn_sign": LaunchConfiguration("turn_sign"),
         }],
     )
 
@@ -43,5 +60,8 @@ def generate_launch_description():
         place_x_arg,
         place_y_arg,
         cam_pose_settle_arg,
+        align_tolerance_arg,
+        base_axis_offset_arg,
+        turn_sign_arg,
         start_task,
     ])

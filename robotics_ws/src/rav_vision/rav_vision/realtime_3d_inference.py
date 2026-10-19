@@ -67,6 +67,14 @@ class RAVVision3D(Node):
         # o cy do camera_info normalmente.
         self.declare_parameter("cy_override", 253.92)
 
+        # Mesmo problema no fx: camera_info diz 358, mas medido em
+        # 2026-10-19 com regua (objeto a 0.42 m, profundidade conferida,
+        # movido 10 cm de lado -> deslocou 108 px) da 108*0.42/0.10 = 454.
+        # Com 358 o x lateral saia ~27% maior que o real. So o fx: fy/cy
+        # continuam como estavam (o z do pick foi ajustado em cima deles).
+        # -1 desliga e usa o fx do camera_info.
+        self.declare_parameter("fx_override", 454.0)
+
         # ----------------------------
         # TF e seleção do alvo
         # ----------------------------
@@ -106,6 +114,9 @@ class RAVVision3D(Node):
         )
         self.cy_override = float(
             self.get_parameter("cy_override").value
+        )
+        self.fx_override = float(
+            self.get_parameter("fx_override").value
         )
 
         self.target_frame = str(
@@ -149,16 +160,24 @@ class RAVVision3D(Node):
         self.cy = None
 
         # TF: câmera -> base_link.
+        # spin_thread=True: o YOLO na CPU bloqueia o executor por ~2s por
+        # frame; sem thread propria o /tf fica parado nesse tempo, as
+        # mensagens estouram a fila e o buffer fica inconsistente
+        # ("extrapolation into the past/future" em todo lookup).
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(
             self.tf_buffer,
-            self
+            self,
+            spin_thread=True
         )
 
+        # depth=1: com a inferencia mais lenta que a camera, uma fila maior
+        # so acumula frames velhos (chegava a ~2.5s de atraso); assim
+        # sempre processa o frame mais recente.
         sensor_qos = QoSProfile(
             reliability=ReliabilityPolicy.BEST_EFFORT,
             history=HistoryPolicy.KEEP_LAST,
-            depth=10
+            depth=1
         )
 
         # CameraInfo normalmente é estático; não precisa sincronizar.
@@ -233,7 +252,11 @@ class RAVVision3D(Node):
             )
             return
 
-        self.fx = float(msg.k[0])
+        self.fx = (
+            self.fx_override
+            if self.fx_override >= 0.0
+            else float(msg.k[0])
+        )
         self.fy = float(msg.k[4])
         self.cx = float(msg.k[2])
         self.cy = (
@@ -419,11 +442,14 @@ class RAVVision3D(Node):
         y2: float
     ):
         """
-        Obtém a profundidade usando a mediana de uma região central
-        da bounding box.
+        Obtém a profundidade do objeto como a superfície mais próxima
+        dentro da bounding box.
 
-        Evita usar somente o pixel central, que pode conter ruído,
-        falha de profundidade ou fundo.
+        Não usa a mediana da região central: a imagem de profundidade
+        registrada fica deslocada da RGB (cresce longe do centro da
+        imagem), e medido em 2026-10-19 metade da bbox caía no fundo --
+        objeto a 0.42 m virava 0.80 m e o x saía 2x maior. O fundo está
+        sempre atrás do objeto, então o grupo mais próximo é o objeto.
         """
 
         height, width = depth_m.shape[:2]
@@ -439,26 +465,9 @@ class RAVVision3D(Node):
         u = int((x1 + x2) / 2)
         v = int((y1 + y2) / 2)
 
-        box_width = x2 - x1
-        box_height = y2 - y1
-
-        half_width = max(
-            2,
-            int((box_width * self.roi_ratio) / 2)
-        )
-
-        half_height = max(
-            2,
-            int((box_height * self.roi_ratio) / 2)
-        )
-
-        roi_x1 = max(0, u - half_width)
-        roi_x2 = min(width, u + half_width)
-
-        roi_y1 = max(0, v - half_height)
-        roi_y2 = min(height, v + half_height)
-
-        roi = depth_m[roi_y1:roi_y2, roi_x1:roi_x2]
+        # Bbox inteira (não só o centro): com o deslocamento depth/RGB o
+        # objeto pode estar só numa lateral da caixa.
+        roi = depth_m[y1:y2, x1:x2]
 
         valid = roi[np.isfinite(roi)]
 
@@ -470,22 +479,18 @@ class RAVVision3D(Node):
         if valid.size < self.min_valid_depth_pixels:
             return None
 
-        median_depth = float(np.median(valid))
+        # Superfície mais próxima: percentil baixo (ignora pontos de ruído
+        # isolados ainda mais perto) e o grupo de pixels logo atrás dele.
+        perto = float(np.percentile(valid, 15))
+        objeto = valid[
+            (valid >= perto - 0.02)
+            & (valid <= perto + 0.03)
+        ]
 
-        # Remove outliers usando Median Absolute Deviation.
-        mad = float(np.median(np.abs(valid - median_depth)))
+        if objeto.size < self.min_valid_depth_pixels:
+            return None
 
-        if mad > 0.0:
-            threshold = max(0.01, 3.0 * mad)
-
-            inliers = valid[
-                np.abs(valid - median_depth) <= threshold
-            ]
-
-            if inliers.size >= self.min_valid_depth_pixels:
-                median_depth = float(np.median(inliers))
-
-        return median_depth, u, v, int(valid.size)
+        return float(np.median(objeto)), u, v, int(objeto.size)
 
     def transform_to_target_frame(
         self,

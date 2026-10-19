@@ -31,7 +31,14 @@ def generate_launch_description():
         AnyLaunchDescriptionSource(
             str(astra_share / "launch" / "dabai_dcw.launch.xml")
         ),
-        launch_arguments={"depth_registration": "true"}.items(),
+        # tf_publish_rate=0: TFs internas da câmera (fixas) vão pro
+        # /tf_static em vez de /tf a 10 Hz. Com a CPU cheia o listener do
+        # realtime_3d_inference atrasa e duas fontes dinâmicas (câmera +
+        # braço) nunca casam no tempo -> detecções sem position_target_m.
+        launch_arguments={
+            "depth_registration": "true",
+            "tf_publish_rate": "0.0",
+        }.items(),
     )
 
     manipulador = IncludeLaunchDescription(

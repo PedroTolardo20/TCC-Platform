@@ -41,9 +41,9 @@
         <joint name="wrist_joint" value="1.5707"/>
     </group_state>
     <group_state name="cam_pose" group="rav_arm">
-        <joint name="elbow_joint" value="0.9285"/>
-        <joint name="shoulder_joint" value="0.2619"/>
-        <joint name="wrist_joint" value="-1.1542"/>
+        <joint name="elbow_joint" value="0.512"/>
+        <joint name="shoulder_joint" value="0.1128"/>
+        <joint name="wrist_joint" value="-0.6682"/>
     </group_state>
     <group_state name="close_ibu" group="rav_gripper">
         <joint name="gripper_pinion_joint" value="0.6"/>

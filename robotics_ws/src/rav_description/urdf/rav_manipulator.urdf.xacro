@@ -567,13 +567,22 @@
          Isso corresponde a rpy = -90 0 -90 graus, coincide com a
          mesma conversao fisico->optico que o driver da camera ja usa
          entre camera_link e camera_color_optical_frame (conferido via
-         tf2_echo camera_link camera_color_optical_frame). -->
+         tf2_echo camera_link camera_color_optical_frame).
+
+         Corrigido em 2026-10-05: justamente por coincidir com a conversao
+         do driver, o -90 0 -90 aplicava a rotacao optica DUAS vezes
+         (aqui + camera_link->camera_color_optical_frame), trocando x e z:
+         mover o objeto de lado mudava z em manipulator_world e mover pra
+         cima/baixo mudava x. So a profundidade (-y) batia, e era o unico
+         eixo validado (a ponte trava x=0). camera_link segue a convencao
+         ROS (x pra frente, z pra cima), entao aqui vai so a montagem
+         fisica: camera em pe olhando pra -y do gripper_tcp = yaw -90. -->
     <link name="camera_link"/>
 
     <joint name="camera_mount_joint" type="fixed">
       <parent link="gripper_tcp"/>
       <child link="camera_link"/>
-      <origin xyz="0 0.055 0.040" rpy="${-pi/2} 0 ${-pi/2}"/>
+      <origin xyz="0 0.055 0.040" rpy="0 0 ${-pi/2}"/>
     </joint>
 
     <!-- GenericSystem preservado para usos que instanciem a macro dessa forma. -->

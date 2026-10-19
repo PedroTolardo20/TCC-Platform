@@ -112,6 +112,12 @@ class RavManipulator(Node):
     def __init__(self):
         super().__init__("rav_manipulator")
 
+        # Correção de altura do pick (m), somada ao z alvo da garra: o braço
+        # descia demais (ajustado em 2026-10-19, +5 cm). Só o alvo do
+        # move_to_pose; o objeto de colisão fica no z original.
+        self.declare_parameter("pick_z_offset_m", 0.05)
+        self.pick_z_offset_m = float(self.get_parameter("pick_z_offset_m").value)
+
         srdf_path = (
             Path(get_package_share_directory("rav_manipulator_moveit_config"))
             / "config"
@@ -368,7 +374,12 @@ class RavManipulator(Node):
         if not ok:
             return False, f"falha ao abrir a gripper: {msg}"
 
-        ok, msg = self.move_to_pose(x, y, z, frame_id)
+        z_alvo = z + self.pick_z_offset_m
+        self.get_logger().info(
+            f"pick: alvo da garra z={z_alvo:.3f} (objeto z={z:.3f} + "
+            f"offset {self.pick_z_offset_m:+.3f})"
+        )
+        ok, msg = self.move_to_pose(x, y, z_alvo, frame_id)
         if not ok:
             return False, f"falha ao alcancar o objeto: {msg}"
 

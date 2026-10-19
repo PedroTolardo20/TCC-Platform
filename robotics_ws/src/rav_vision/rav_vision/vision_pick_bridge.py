@@ -21,7 +21,9 @@ Y_MIN, Y_MAX = -1, 1
 Z_MIN, Z_MAX = -1, 1
 X_TOLERANCE = 1
 
-MAX_TARGET_AGE_S = 2.0
+# Idade medida a partir do stamp da imagem, nao da chegada da deteccao:
+# com YOLO na CPU so a inferencia ja leva ~2s, entao 2.0 recusava tudo.
+MAX_TARGET_AGE_S = 5.0
 
 
 class VisionPickBridge(Node):
@@ -37,8 +39,13 @@ class VisionPickBridge(Node):
 
         self.declare_parameter("radius", 0.02)
         self.declare_parameter("height", 0.08)
+        # Correção extra de altura (m) somada ao z da visão. Zero: a correção
+        # de +5 cm do pick fica no próprio serviço (manipulator_node,
+        # parâmetro pick_z_offset_m) pra valer em qualquer chamada de pick.
+        self.declare_parameter("z_offset_m", 0.0)
         self.radius = float(self.get_parameter("radius").value)
         self.height = float(self.get_parameter("height").value)
+        self.z_offset_m = float(self.get_parameter("z_offset_m").value)
 
         cb_group = ReentrantCallbackGroup()
 
@@ -85,7 +92,7 @@ class VisionPickBridge(Node):
         # translacao do mount, nao rotacao -- nao reintroduzir swap aqui.
         x = msg.pose.position.x
         y = msg.pose.position.y - 0.04
-        z = msg.pose.position.z
+        z = msg.pose.position.z + self.z_offset_m
 
         # if not self._is_within_safe_workspace(x, y, z):
         #     self.get_logger().warn(

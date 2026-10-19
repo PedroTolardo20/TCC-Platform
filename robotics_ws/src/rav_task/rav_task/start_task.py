@@ -1,14 +1,17 @@
 import asyncio
 import json
+import math
 import threading
 import time
 
 import rclpy
+from geometry_msgs.msg import PoseStamped
 from rcl_interfaces.msg import Parameter, ParameterType, ParameterValue
 from rcl_interfaces.srv import SetParameters
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
+from rclpy.time import Time
 from std_srvs.srv import Trigger
 
 import websockets
@@ -29,6 +32,8 @@ PLACE_Z_BY_CLASS = {
 DEFAULT_PLACE_Z = 0.05
 
 CAM_POSE_STATE = "cam_pose"
+
+TARGET_POSE_TOPIC = "/rav_vision/target_pose"
 
 
 class StartTaskNode(Node):
@@ -54,7 +59,56 @@ class StartTaskNode(Node):
             self.get_parameter("cam_pose_settle_s").value
         )
 
+        # Alinhamento da base (Temi) antes do pick: o braco so alcanca o
+        # plano x~0 (3 juntas coplanares, a ponte trava x=0), entao se a
+        # visao ve o objeto fora de |x| <= align_tolerance_m a base gira
+        # ate ele entrar nessa faixa.
+        self.declare_parameter("align_tolerance_m", 0.02)
+        self.declare_parameter("align_max_iterations", 6)
+        # Distancia (m) do eixo de giro do Temi ate a origem de
+        # manipulator_world, ao longo da direcao de alcance do braco (-y).
+        # O angulo de giro e atan2(x, |y| + offset): sem esse offset o
+        # giro sai grande demais pra objetos perto. Medir com regua.
+        self.declare_parameter("base_axis_offset_m", 0.0)
+        # +1 se turnBy positivo (anti-horario, visto de cima) leva um
+        # objeto em x>0 pra x=0; -1 se for o contrario. Conferir no 1o teste.
+        self.declare_parameter("turn_sign", 1)
+        self.declare_parameter("min_turn_deg", 2)
+        self.declare_parameter("max_turn_deg", 45)
+        self.declare_parameter("turn_timeout_s", 15.0)
+        # Depois do giro: tempo pra camera/visao estabilizar e prazo pra
+        # chegar uma deteccao nova (YOLO na CPU leva ~2s por frame).
+        self.declare_parameter("post_turn_settle_s", 1.0)
+        self.declare_parameter("detection_timeout_s", 8.0)
+
+        self.align_tolerance_m = float(self.get_parameter("align_tolerance_m").value)
+        self.align_max_iterations = int(self.get_parameter("align_max_iterations").value)
+        self.base_axis_offset_m = float(self.get_parameter("base_axis_offset_m").value)
+        self.turn_sign = 1 if int(self.get_parameter("turn_sign").value) >= 0 else -1
+        self.min_turn_deg = int(self.get_parameter("min_turn_deg").value)
+        self.max_turn_deg = int(self.get_parameter("max_turn_deg").value)
+        self.turn_timeout_s = float(self.get_parameter("turn_timeout_s").value)
+        self.post_turn_settle_s = float(self.get_parameter("post_turn_settle_s").value)
+        self.detection_timeout_s = float(self.get_parameter("detection_timeout_s").value)
+
         cb_group = ReentrantCallbackGroup()
+
+        # Ultima deteccao da visao (x, y, z, stamp em segundos).
+        self._target_lock = threading.Lock()
+        self._latest_target = None
+        self.create_subscription(
+            PoseStamped,
+            TARGET_POSE_TOPIC,
+            self._on_target_pose,
+            10,
+            callback_group=cb_group,
+        )
+
+        # Conexao WebSocket ativa com o RavPlatform + espera do giro.
+        self._ws = None
+        self._ws_loop = None
+        self._giro_evento = threading.Event()
+        self._giro_resultado = (False, "")
 
         self._move_client = self.create_client(
             MoveToNamedState, "move_to_named_state", callback_group=cb_group
@@ -136,6 +190,93 @@ class StartTaskNode(Node):
         return True, "ok"
 
     # ------------------------------------------------------------------
+    # Alinhamento da base (giro do Temi) pela coordenada x da visão.
+    # ------------------------------------------------------------------
+    def _on_target_pose(self, msg: PoseStamped):
+        stamp = Time.from_msg(msg.header.stamp).nanoseconds / 1e9
+        with self._target_lock:
+            self._latest_target = (
+                msg.pose.position.x, msg.pose.position.y, msg.pose.position.z, stamp
+            )
+
+    def _esperar_deteccao(self, depois_de: float):
+        """Espera uma detecção cuja imagem foi capturada depois de
+        'depois_de' (relógio ROS, s) -- garante que é do frame pós-giro."""
+        prazo = time.monotonic() + self.detection_timeout_s
+        while time.monotonic() < prazo:
+            with self._target_lock:
+                alvo = self._latest_target
+            if alvo is not None and alvo[3] > depois_de:
+                return alvo
+            time.sleep(0.1)
+        return None
+
+    def _enviar_ws(self, payload: dict):
+        if self._ws is None or self._ws_loop is None:
+            return False
+        futuro = asyncio.run_coroutine_threadsafe(
+            self._ws.send(json.dumps(payload)), self._ws_loop
+        )
+        try:
+            futuro.result(timeout=5.0)
+            return True
+        except Exception as exc:
+            self.get_logger().error(f"falha ao enviar pelo WebSocket: {exc}")
+            return False
+
+    def _girar_base(self, graus: int):
+        """Pede pro RavPlatform girar o Temi (turnBy) e espera a confirmação."""
+        self._giro_evento.clear()
+        if not self._enviar_ws({"tipo": "girar_base", "graus": graus}):
+            return False, "RavPlatform não conectado para girar a base"
+        if not self._giro_evento.wait(timeout=self.turn_timeout_s):
+            return False, f"timeout ({self.turn_timeout_s}s) esperando giro_concluido"
+        return self._giro_resultado
+
+    def alinhar_base(self):
+        """Gira a base até |x| da detecção ficar dentro da tolerância."""
+        agora = self.get_clock().now().nanoseconds / 1e9
+        for tentativa in range(1, self.align_max_iterations + 1):
+            alvo = self._esperar_deteccao(depois_de=agora)
+            if alvo is None:
+                return False, (
+                    f"sem detecção nova em {self.detection_timeout_s}s "
+                    "para alinhar a base"
+                )
+            x, y, _, _ = alvo
+
+            if abs(x) <= self.align_tolerance_m:
+                self.get_logger().info(
+                    f"base alinhada: x={x:+.3f} (tolerância "
+                    f"±{self.align_tolerance_m:.3f}) após {tentativa - 1} giro(s)"
+                )
+                return True, "ok"
+
+            # Ângulo do objeto visto do eixo de giro do Temi.
+            alcance = abs(y) + self.base_axis_offset_m
+            angulo = self.turn_sign * math.degrees(math.atan2(x, alcance))
+            # Limita entre min e max mantendo o sinal: giros muito pequenos
+            # o Temi ignora, e um giro grande demais (deteccao ruim) e perigoso.
+            modulo = min(self.max_turn_deg, max(self.min_turn_deg, round(abs(angulo))))
+            graus = int(math.copysign(modulo, angulo))
+
+            self.get_logger().info(
+                f"alinhamento {tentativa}/{self.align_max_iterations}: "
+                f"x={x:+.3f} y={y:+.3f} -> girando base {graus:+d} graus"
+            )
+            ok, msg = self._girar_base(graus)
+            if not ok:
+                return False, f"giro da base falhou: {msg}"
+
+            time.sleep(self.post_turn_settle_s)
+            agora = self.get_clock().now().nanoseconds / 1e9
+
+        return False, (
+            f"objeto fora de ±{self.align_tolerance_m:.3f} m depois de "
+            f"{self.align_max_iterations} giros"
+        )
+
+    # ------------------------------------------------------------------
     # Sequências completas, chamadas do handler WebSocket.
     # ------------------------------------------------------------------
     def executar_pick(self):
@@ -155,6 +296,10 @@ class StartTaskNode(Node):
             # Deixa a visão publicar algumas detecções estáveis, já
             # filtradas pra 'classe', com o braço parado em cam_pose.
             time.sleep(self.cam_pose_settle_s)
+
+            ok, msg = self.alinhar_base()
+            if not ok:
+                return False, f"falha ao alinhar a base: {msg}"
 
             ok, msg = self._pick_from_vision()
             if not ok:
@@ -180,10 +325,31 @@ class StartTaskNode(Node):
     # ------------------------------------------------------------------
     # WebSocket
     # ------------------------------------------------------------------
+    async def _rodar_e_responder(self, websocket, funcao, tipo_resposta, depois=None):
+        # Roda em tarefa separada (nao com await direto no loop de leitura):
+        # durante o pick o alinhamento pede giros ao Temi e precisa receber
+        # o "giro_concluido" enquanto executar_pick ainda nao terminou.
+        loop = asyncio.get_running_loop()
+        success, mensagem = await loop.run_in_executor(None, funcao)
+        await websocket.send(json.dumps({
+            "tipo": tipo_resposta,
+            "success": success,
+            "mensagem": mensagem,
+        }))
+        if depois is not None:
+            depois()
+
     async def handle_connection(self, websocket):
         peer = websocket.remote_address
         self.get_logger().info(f"RavPlatform conectado: {peer}")
-        loop = asyncio.get_running_loop()
+        self._ws = websocket
+        self._ws_loop = asyncio.get_running_loop()
+        tarefas = set()
+
+        def disparar(coro):
+            tarefa = asyncio.create_task(coro)
+            tarefas.add(tarefa)
+            tarefa.add_done_callback(tarefas.discard)
 
         try:
             async for raw in websocket:
@@ -203,30 +369,36 @@ class StartTaskNode(Node):
 
                 elif tipo == "chegou_pickup":
                     self.get_logger().info("chegou_pickup -- iniciando pick")
-                    success, mensagem = await loop.run_in_executor(
-                        None, self.executar_pick
-                    )
-                    await websocket.send(json.dumps({
-                        "tipo": "pick_concluido",
-                        "success": success,
-                        "mensagem": mensagem,
-                    }))
+                    disparar(self._rodar_e_responder(
+                        websocket, self.executar_pick, "pick_concluido"
+                    ))
 
                 elif tipo == "chegou_place":
                     self.get_logger().info("chegou_place -- iniciando place")
-                    success, mensagem = await loop.run_in_executor(
-                        None, self.executar_place
+
+                    def limpar_pedido():
+                        self._classe_yolo = None
+
+                    disparar(self._rodar_e_responder(
+                        websocket, self.executar_place, "place_concluido",
+                        depois=limpar_pedido,
+                    ))
+
+                elif tipo == "giro_concluido":
+                    self._giro_resultado = (
+                        bool(msg.get("success")), str(msg.get("mensagem", ""))
                     )
-                    await websocket.send(json.dumps({
-                        "tipo": "place_concluido",
-                        "success": success,
-                        "mensagem": mensagem,
-                    }))
-                    self._classe_yolo = None
+                    self._giro_evento.set()
 
                 else:
                     self.get_logger().warn(f"tipo desconhecido: {tipo!r}")
         finally:
+            if self._ws is websocket:
+                self._ws = None
+                self._ws_loop = None
+            # Destrava um alinhamento que estava esperando giro dessa conexão.
+            self._giro_resultado = (False, "RavPlatform desconectou durante o giro")
+            self._giro_evento.set()
             self.get_logger().info(f"RavPlatform desconectado: {peer}")
 
     async def serve_forever(self):
