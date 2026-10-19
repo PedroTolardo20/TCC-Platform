@@ -78,8 +78,29 @@ class TemiComandos :
         robot.turnBy(graus, VELOCIDADE_GIRO)
     }
 
-    /** Pose atual no mapa (x, y em m; yaw em rad), ou null se ainda não chegou. */
-    fun poseAtual(): Position? = posicaoAtual
+    /** Pose atual no mapa (x, y em m; yaw em rad), ou null se desconhecida. */
+    fun poseAtual(): Position? = poseAgora()
+
+    /**
+     * Consulta a pose direto no serviço do Temi (getPosition). O listener
+     * OnCurrentPositionChangedListener só dispara com o robô andando --
+     * parado ficava em (0, 0, 0). Se a consulta falhar ou vier zerada,
+     * usa a última recebida pelo listener.
+     */
+    private fun poseAgora(): Position? {
+        val consultada = try {
+            robot.getPosition()
+        } catch (e: Exception) {
+            Log.w(TAG, "getPosition falhou: ${e.message}")
+            null
+        }
+        if (consultada != null &&
+            (consultada.x != 0f || consultada.y != 0f || consultada.yaw != 0f)
+        ) {
+            posicaoAtual = consultada
+        }
+        return posicaoAtual
+    }
 
     /**
      * Gira até o yaw ABSOLUTO 'yawRad' do mapa: turnBy pelo erro, espera a
@@ -88,7 +109,7 @@ class TemiComandos :
      */
     fun girarPara(yawRad: Float, onFim: (Boolean, String) -> Unit) {
         if (!iniciar(onFim)) return
-        if (posicaoAtual == null) {
+        if (poseAgora() == null) {
             terminar(false, "posição do Temi ainda desconhecida (mapa carregado?)")
             return
         }
@@ -99,7 +120,7 @@ class TemiComandos :
     }
 
     private val passoGirarPara = Runnable {
-        val yaw = posicaoAtual?.yaw ?: return@Runnable
+        val yaw = poseAgora()?.yaw ?: return@Runnable
         val erroGraus = Math.toDegrees(normalizar(yawAlvo - yaw).toDouble()).toFloat()
         when {
             abs(erroGraus) <= TOLERANCIA_GIRO_GRAUS -> {
@@ -147,7 +168,7 @@ class TemiComandos :
             terminar(true, "distância 0 ignorada")
             return
         }
-        val inicio = posicaoAtual
+        val inicio = poseAgora()
         if (inicio == null) {
             terminar(false, "posição do Temi ainda desconhecida (mapa carregado?)")
             return
@@ -215,7 +236,7 @@ class TemiComandos :
 
     private fun erroRumo(): Float? {
         if (yawRumo.isNaN()) return null
-        val yaw = posicaoAtual?.yaw ?: return null
+        val yaw = poseAgora()?.yaw ?: return null
         return normalizar(yawRumo - yaw)
     }
 
@@ -239,7 +260,7 @@ class TemiComandos :
     }
 
     private fun distanciaDesde(inicio: Position): Float {
-        val atual = posicaoAtual ?: inicio
+        val atual = poseAgora() ?: inicio
         return hypot(atual.x - inicio.x, atual.y - inicio.y)
     }
 

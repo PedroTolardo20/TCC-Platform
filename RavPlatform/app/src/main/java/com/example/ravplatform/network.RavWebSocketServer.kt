@@ -106,6 +106,7 @@ class RavWebSocketServer(
                         put("x", pose.x.toDouble())
                         put("y", pose.y.toDouble())
                         put("yaw", pose.yaw.toDouble())
+                        put("no_mapa", pose.isInMapArea ?: JSONObject.NULL)
                     }
                 }
                 conn.send(resp.toString())
