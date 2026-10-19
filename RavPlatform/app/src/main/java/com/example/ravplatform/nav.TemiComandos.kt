@@ -191,6 +191,7 @@ class TemiComandos :
         yawRumo: Float,
         ganhoRumo: Float,
         segurancaTemporaria: String?,
+        timeoutS: Float,
         onFim: (Boolean, String) -> Unit
     ) {
         if (!iniciar(onFim)) return
@@ -222,10 +223,12 @@ class TemiComandos :
                 Log.w(TAG, "segurança '$segurancaTemporaria' inválida: ${e.message}")
             }
         }
-        prazoAndar = System.currentTimeMillis() + if (porTempo) {
-            (duracaoS * 1000).toLong()
-        } else {
-            ((metros / VELOCIDADE_ANDAR_MIN_M_S) * 1000).toLong() + 3000
+        prazoAndar = System.currentTimeMillis() + when {
+            porTempo -> (duracaoS * 1000).toLong()
+            // Prazo explícito: perto de obstáculo o Temi anda bem mais devagar
+            // que o normal (freia), e o padrão abaixo desistiria antes.
+            timeoutS > 0f -> (timeoutS * 1000).toLong()
+            else -> ((metros / VELOCIDADE_ANDAR_MIN_M_S) * 1000).toLong() + 3000
         }
         Log.d(TAG, "andar $metros m (vel $velocidadeAndar, antecipação $antecipacaoAndar, " +
             "duração ${duracaoS}s) a partir de (${inicio.x}, ${inicio.y})")

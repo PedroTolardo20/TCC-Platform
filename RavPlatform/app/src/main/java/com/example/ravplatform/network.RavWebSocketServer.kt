@@ -70,8 +70,8 @@ class RavWebSocketServer(
     // {"tipo":"comando","comando":"ir_para"|"girar"|"girar_para"|"andar"|"pose", ...}
     //  ir_para: "local"; girar: "graus" (relativo); girar_para: "yaw" (rad, absoluto
     //  no mapa) + opcionais "tolerancia_graus" (1) e "aceitar_graus" (3); andar: "metros" + opcionais "velocidade", "antecipacao_m",
-    //  "duracao_s", "yaw_rumo" (rad), "ganho_rumo" e "seguranca" (DEFAULT/MEDIUM/HIGH,
-    //  só durante o andar); pose: devolve x, y, yaw; obstaculo: lê/define ("cm")
+    //  "duracao_s", "yaw_rumo" (rad), "ganho_rumo", "seguranca" (DEFAULT/MEDIUM/HIGH,
+    //  só durante o andar) e "timeout_s"; pose: devolve x, y, yaw; obstaculo: lê/define ("cm")
     //  a distância mínima a obstáculos e mostra a segurança atual.
     // -> responde {"tipo":"comando_concluido","comando":...,"success":...,"mensagem":...}
     private fun executarComando(conn: WebSocket, json: JSONObject) {
@@ -151,6 +151,7 @@ class RavWebSocketServer(
                 yawRumo = json.optDouble("yaw_rumo", Double.NaN).toFloat(),
                 ganhoRumo = json.optDouble("ganho_rumo", 0.0).toFloat(),
                 segurancaTemporaria = json.optString("seguranca", "").ifEmpty { null },
+                timeoutS = json.optDouble("timeout_s", 0.0).toFloat(),
                 onFim = ::responder
             )
             else -> responder(false, "comando desconhecido: '$comando'")
