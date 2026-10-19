@@ -69,7 +69,7 @@ class RavWebSocketServer(
 
     // {"tipo":"comando","comando":"ir_para"|"girar"|"girar_para"|"andar"|"pose", ...}
     //  ir_para: "local"; girar: "graus" (relativo); girar_para: "yaw" (rad, absoluto
-    //  no mapa); andar: "metros" + opcionais "velocidade", "antecipacao_m",
+    //  no mapa) + opcionais "tolerancia_graus" (1) e "aceitar_graus" (3); andar: "metros" + opcionais "velocidade", "antecipacao_m",
     //  "duracao_s", "yaw_rumo" (rad) e "ganho_rumo"; pose: devolve x, y, yaw.
     // -> responde {"tipo":"comando_concluido","comando":...,"success":...,"mensagem":...}
     private fun executarComando(conn: WebSocket, json: JSONObject) {
@@ -112,7 +112,12 @@ class RavWebSocketServer(
                 conn.send(resp.toString())
                 onLog("Enviado: $resp")
             }
-            "girar_para" -> executor.girarPara(json.optDouble("yaw").toFloat(), ::responder)
+            "girar_para" -> executor.girarPara(
+                yawRad = json.optDouble("yaw").toFloat(),
+                toleranciaGraus = json.optDouble("tolerancia_graus", 1.0).toFloat(),
+                aceitarGraus = json.optDouble("aceitar_graus", 3.0).toFloat(),
+                onFim = ::responder
+            )
             "andar" -> executor.andarFrente(
                 metros = json.optDouble("metros", 0.0).toFloat(),
                 velocidade = json.optDouble(

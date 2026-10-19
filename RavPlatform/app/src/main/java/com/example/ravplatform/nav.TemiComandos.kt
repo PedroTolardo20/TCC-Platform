@@ -52,6 +52,8 @@ class TemiComandos :
     private var girandoPara = false
     private var yawAlvo = 0f
     private var tentativasGiro = 0
+    private var toleranciaGiroGraus = 1f
+    private var aceitarGiroGraus = 3f
 
     init {
         robot.addOnGoToLocationStatusChangedListener(this)
@@ -104,16 +106,27 @@ class TemiComandos :
 
     /**
      * Gira até o yaw ABSOLUTO 'yawRad' do mapa: turnBy pelo erro, espera a
-     * pose atualizar, confere e repete até |erro| <= TOLERANCIA_GIRO_GRAUS.
+     * pose atualizar, confere e repete até |erro| <= toleranciaGraus.
      * Diferente do girar(): não acumula erro de giros anteriores.
+     *
+     * turnBy de 1-2° é impreciso (o Temi oscila em volta do alvo), então
+     * depois de MAX_TENTATIVAS_GIRO aceita o que tiver se |erro| <=
+     * aceitarGraus -- quem chama mede o yaw de novo e compensa o resto.
      */
-    fun girarPara(yawRad: Float, onFim: (Boolean, String) -> Unit) {
+    fun girarPara(
+        yawRad: Float,
+        toleranciaGraus: Float,
+        aceitarGraus: Float,
+        onFim: (Boolean, String) -> Unit
+    ) {
         if (!iniciar(onFim)) return
         if (poseAgora() == null) {
             terminar(false, "posição do Temi ainda desconhecida (mapa carregado?)")
             return
         }
         yawAlvo = yawRad
+        toleranciaGiroGraus = toleranciaGraus
+        aceitarGiroGraus = maxOf(aceitarGraus, toleranciaGraus)
         tentativasGiro = 0
         girandoPara = true
         handler.post(passoGirarPara)
@@ -123,15 +136,17 @@ class TemiComandos :
         val yaw = poseAgora()?.yaw ?: return@Runnable
         val erroGraus = Math.toDegrees(normalizar(yawAlvo - yaw).toDouble()).toFloat()
         when {
-            abs(erroGraus) <= TOLERANCIA_GIRO_GRAUS -> {
+            abs(erroGraus) <= toleranciaGiroGraus -> {
                 girandoPara = false
                 terminar(true, "yaw %.4f rad (alvo %.4f, erro %.1f°, %d giro(s))"
                     .format(yaw, yawAlvo, erroGraus, tentativasGiro))
             }
             tentativasGiro >= MAX_TENTATIVAS_GIRO -> {
                 girandoPara = false
-                terminar(false, "não chegou no yaw alvo: erro %.1f° após %d giros"
-                    .format(erroGraus, tentativasGiro))
+                val aceitou = abs(erroGraus) <= aceitarGiroGraus
+                terminar(aceitou, "yaw %.4f rad (alvo %.4f, erro %.1f° após %d giros%s)"
+                    .format(yaw, yawAlvo, erroGraus, tentativasGiro,
+                        if (aceitou) ", aceito" else " -- acima de %.1f°".format(aceitarGiroGraus)))
             }
             else -> {
                 tentativasGiro++
@@ -348,7 +363,6 @@ class TemiComandos :
         private const val PERIODO_SKIDJOY_MS = 100L
         private const val TOLERANCIA_ANDAR_M = 0.005f
 
-        private const val TOLERANCIA_GIRO_GRAUS = 1.0f
         private const val MAX_TENTATIVAS_GIRO = 5
         private const val ESPERA_YAW_MS = 800L
         private const val ANGULAR_MAX_RUMO = 0.3f
