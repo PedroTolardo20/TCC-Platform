@@ -35,7 +35,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 //import com.example.ravplatform.nav.NavegacaoStub
 import com.example.ravplatform.nav.TemiComandos
-import com.example.ravplatform.nav.TemiNavegacao
 import com.example.ravplatform.network.RavWebSocketServer
 import com.example.ravplatform.ui.components.FuturisticBackground
 import com.example.ravplatform.ui.theme.NeonCyan
@@ -58,7 +57,6 @@ class MainActivity : ComponentActivity() {
 
         servidor = RavWebSocketServer(
             porta = PORTA_SERVIDOR,
-            navegacao = TemiNavegacao(),
             onLog = { linha -> logs.value = logs.value + linha },
             comandos = TemiComandos()
         ).apply {

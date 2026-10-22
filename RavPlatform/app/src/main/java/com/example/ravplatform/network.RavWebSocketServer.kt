@@ -1,8 +1,5 @@
 package com.example.ravplatform.network
 
-import com.example.ravplatform.data.PONTO_ENTREGA
-import com.example.ravplatform.data.localDoProduto
-import com.example.ravplatform.nav.NavegacaoController
 import com.example.ravplatform.nav.TemiComandos
 import org.java_websocket.WebSocket
 import org.java_websocket.handshake.ClientHandshake
@@ -10,61 +7,140 @@ import org.java_websocket.server.WebSocketServer
 import org.json.JSONObject
 import java.net.InetSocketAddress
 
+/**
+ * Servidor do tablet do Temi. Duas pontas se conectam aqui:
+ *  - RavTotem: manda {"tipo":"pedido","pedidoId","produtoId"} e recebe
+ *    {"tipo":"status","pedidoId","etapa"};
+ *  - orquestrador (Linux, rav_task/orquestrador.py): se registra com
+ *    {"tipo":"registrar","papel":"orquestrador"}, recebe as tarefas, manda
+ *    {"tipo":"status_tarefa",...} (repassado ao Totem) e
+ *    {"tipo":"orquestrador_livre"} quando termina; e comanda a base com
+ *    {"tipo":"comando",...} (executados pelo TemiComandos).
+ * Um pedido por vez: com o robô ocupado o Totem recebe "erro".
+ */
 class RavWebSocketServer(
     porta: Int,
-    private val navegacao: NavegacaoController,
     private val onLog: (String) -> Unit,
-    // Comandos avulsos de movimento (teste de alinhamento disparado pelo
-    // Linux); null = servidor só aceita pedidos do Totem.
     private val comandos: TemiComandos? = null
 ) : WebSocketServer(InetSocketAddress(porta)) {
+
+    private val trava = Any()
+    private var orquestrador: WebSocket? = null
+    private var ocupado = false
+    private var pedidoAtual: String? = null
+    private var totemAtual: WebSocket? = null
 
     override fun onStart() {
         onLog("Servidor ouvindo na porta $port")
     }
 
     override fun onOpen(conn: WebSocket, handshake: ClientHandshake) {
-        onLog("Totem conectado: ${conn.remoteSocketAddress}")
+        onLog("Conectado: ${conn.remoteSocketAddress}")
     }
 
     override fun onClose(conn: WebSocket, code: Int, reason: String?, remote: Boolean) {
-        onLog("Totem desconectado")
+        synchronized(trava) {
+            if (conn == orquestrador) {
+                orquestrador = null
+                onLog("Orquestrador (Linux) desconectado")
+                if (ocupado) {
+                    // Linux caiu no meio de um pedido: avisa o Totem e libera.
+                    enviarStatusTotem("erro")
+                    liberar()
+                }
+            } else if (conn == totemAtual) {
+                totemAtual = null
+                onLog("Totem desconectado")
+            } else {
+                onLog("Desconectado: ${conn.remoteSocketAddress}")
+            }
+        }
     }
 
     override fun onMessage(conn: WebSocket, message: String) {
         onLog("Recebido: $message")
         val json = JSONObject(message)
-        if (json.optString("tipo") == "comando") {
-            executarComando(conn, json)
-            return
+        when (json.optString("tipo")) {
+            "comando" -> executarComando(conn, json)
+            "registrar" -> registrar(conn, json)
+            "pedido" -> receberPedido(conn, json)
+            "status_tarefa" -> synchronized(trava) {
+                if (json.optString("pedidoId") == pedidoAtual) {
+                    enviarStatusTotem(json.optString("etapa"))
+                }
+            }
+            "orquestrador_livre" -> synchronized(trava) {
+                onLog("Robô livre para o próximo pedido")
+                liberar()
+            }
         }
-        if (json.optString("tipo") != "pedido") return
+    }
 
+    private fun registrar(conn: WebSocket, json: JSONObject) {
+        if (json.optString("papel") != "orquestrador") return
+        synchronized(trava) {
+            orquestrador = conn
+            onLog("Orquestrador (Linux) registrado: ${conn.remoteSocketAddress}")
+        }
+    }
+
+    private fun receberPedido(conn: WebSocket, json: JSONObject) {
         val pedidoId = json.optString("pedidoId")
         val produtoId = json.optInt("produtoId", -1)
 
-        fun enviarStatus(etapa: String) {
-            val resp = JSONObject().apply {
+        fun responder(etapa: String) {
+            conn.send(JSONObject().apply {
                 put("tipo", "status")
                 put("pedidoId", pedidoId)
                 put("etapa", etapa)
+            }.toString())
+            onLog("Enviado ao Totem: $etapa")
+        }
+
+        synchronized(trava) {
+            val linux = orquestrador
+            when {
+                linux == null || !linux.isOpen -> {
+                    onLog("Pedido $pedidoId recusado: orquestrador (Linux) não conectado")
+                    responder("erro")
+                }
+                ocupado -> {
+                    onLog("Pedido $pedidoId recusado: robô ocupado com $pedidoAtual")
+                    responder("erro")
+                }
+                else -> {
+                    ocupado = true
+                    pedidoAtual = pedidoId
+                    totemAtual = conn
+                    responder("recebido")
+                    linux.send(JSONObject().apply {
+                        put("tipo", "tarefa")
+                        put("pedidoId", pedidoId)
+                        put("produtoId", produtoId)
+                    }.toString())
+                    onLog("Tarefa $pedidoId (produto $produtoId) enviada ao orquestrador")
+                }
             }
-            conn.send(resp.toString())
-            onLog("Enviado: $etapa")
         }
+    }
 
-        val local = localDoProduto(produtoId)
-        if (local == null) {
-            enviarStatus("erro")
-            onLog("Produto $produtoId nao encontrado no catalogo")
-            return
-        }
+    /** Chamar com a trava. */
+    private fun enviarStatusTotem(etapa: String) {
+        val totem = totemAtual ?: return
+        if (!totem.isOpen) return
+        totem.send(JSONObject().apply {
+            put("tipo", "status")
+            put("pedidoId", pedidoAtual)
+            put("etapa", etapa)
+        }.toString())
+        onLog("Enviado ao Totem: $etapa")
+    }
 
-        enviarStatus("recebido")
-        onLog("Navegando para ${local.pontoNavegacao} (YOLO: ${local.classeYolo})")
-        navegacao.executarPedido(local.pontoNavegacao, local.classeYolo, PONTO_ENTREGA) { etapa ->
-            enviarStatus(etapa)
-        }
+    /** Chamar com a trava. */
+    private fun liberar() {
+        ocupado = false
+        pedidoAtual = null
+        totemAtual = null
     }
 
     // {"tipo":"comando","comando":"ir_para"|"girar"|"girar_para"|"andar"|"pose", ...}

@@ -43,9 +43,9 @@ enum class Tela {
     STATUS
 }
 
-// IP do servidor do Platform. No emulador, 10.0.2.2 = a máquina host (seu Mac).
-// No tablet real, troque pelo IP do tablet do Platform na rede local.
-private const val URL_SERVIDOR = "ws://192.168.50.137:8765"
+// Servidor do RavPlatform: tablet do Temi (Lenovo) no hotspot do robô.
+// No emulador, use ws://10.0.2.2:8765 (= a máquina host).
+private const val URL_SERVIDOR = "ws://172.20.10.3:8765"
 
 @Composable
 fun RavTotemApp() {
