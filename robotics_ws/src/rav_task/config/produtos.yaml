@@ -1,0 +1,32 @@
+# Catálogo usado pelo orquestrador (rav_task/orquestrador.py).
+# Os ids PRECISAM bater com os do app RavTotem (data/Product.kt).
+#
+#   classe:   classe do YOLO (rav_vision) que identifica o remédio
+#   local:    local salvo no mapa do Temi de frente pra prateleira
+#             (o yaw de cada local é calibrado com modo:=calibrar_yaw)
+#   cam_pose: pose nomeada do braço (SRDF) pra olhar a altura onde o
+#             remédio está -- criar no MoveIt Setup Assistant e trocar aqui
+#
+# Mudou um remédio de lugar/altura? Edite este arquivo e reinicie o
+# orquestrador; não precisa recompilar nenhum app.
+
+produtos:
+  1:
+    nome: Ibuprotrat 400mg
+    classe: ibuprotrat
+    local: preprateleira
+    cam_pose: cam_pose
+  2:
+    nome: Maxalgina 1g
+    classe: maxalgina
+    local: preprateleira
+    cam_pose: cam_pose
+  3:
+    nome: Aciclovir 200mg
+    classe: aciclovir
+    local: preprateleira
+    cam_pose: cam_pose
+
+# Local de entrega (mapa do Temi) e base de carregamento.
+local_place: place
+local_base: home base

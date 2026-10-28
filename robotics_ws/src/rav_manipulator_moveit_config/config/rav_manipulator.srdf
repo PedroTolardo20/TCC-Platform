@@ -35,10 +35,15 @@
         <joint name="shoulder_joint" value="-0.42"/>
         <joint name="wrist_joint" value="0.824"/>
     </group_state>
+    <group_state name="place" group="rav_arm">
+        <joint name="elbow_joint" value="-0.54"/>
+        <joint name="shoulder_joint" value="0.43"/>
+        <joint name="wrist_joint" value="0.0"/>
+    </group_state>
     <group_state name="ready" group="rav_arm">
         <joint name="elbow_joint" value="0.4252"/>
         <joint name="shoulder_joint" value="-0.42"/>
-        <joint name="wrist_joint" value="1.5707"/>
+        <joint name="wrist_joint" value="-1.5707"/>
     </group_state>
     <group_state name="cam_pose" group="rav_arm">
         <joint name="elbow_joint" value="0.512"/>

@@ -6,8 +6,10 @@ import yaml
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import RegisterEventHandler, TimerAction
+from launch.actions import DeclareLaunchArgument, RegisterEventHandler, TimerAction
+from launch.conditions import IfCondition
 from launch.event_handlers import OnProcessExit
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from moveit_configs_utils import MoveItConfigsBuilder
 
@@ -173,6 +175,8 @@ def generate_launch_description():
     )
 
     rviz = Node(
+        # rviz:=false no rav_robo.launch.py: o RViz pesa na CPU e atrasa a visão.
+        condition=IfCondition(LaunchConfiguration("rviz")),
         package="rviz2",
         executable="rviz2",
         output="screen",
@@ -216,6 +220,9 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
+        DeclareLaunchArgument(
+            "rviz", default_value="true", description="Abrir o RViz junto."
+        ),
         static_tf,
         robot_state_publisher,
         controller_manager,

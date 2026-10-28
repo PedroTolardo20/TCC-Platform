@@ -87,6 +87,37 @@ IK_TIMEOUT_S = 0.3
 JOINT_TOLERANCE = 0.01
 
 
+class _ActionClientSemCorrida(ActionClient):
+    """ActionClient do rclpy (Humble) sem a corrida do send_goal_async.
+
+    Ele envia o pedido e SO DEPOIS registra o future da resposta, sem
+    trava. Com o executor multithread, se o move_group responde nesse
+    intervalo a resposta e descartada ("Ignoring unexpected goal
+    response") e o goal fica sem resposta ate o timeout, mesmo com o
+    braco tendo se movido. A trava faz o take_data esperar o registro.
+    """
+
+    def __init__(self, *args, **kwargs):
+        self._trava_corrida = threading.Lock()
+        super().__init__(*args, **kwargs)
+
+    def take_data(self):
+        with self._trava_corrida:
+            return super().take_data()
+
+    def send_goal_async(self, *args, **kwargs):
+        with self._trava_corrida:
+            return super().send_goal_async(*args, **kwargs)
+
+    def _get_result_async(self, *args, **kwargs):
+        with self._trava_corrida:
+            return super()._get_result_async(*args, **kwargs)
+
+    def _cancel_goal_async(self, *args, **kwargs):
+        with self._trava_corrida:
+            return super()._cancel_goal_async(*args, **kwargs)
+
+
 def _parse_named_states(srdf_path: Path) -> dict:
     """Le rav_manipulator.srdf: {group: {state_name: {joint: valor}}}.
 
@@ -139,7 +170,7 @@ class RavManipulator(Node):
         # mesmo tempo (ver _wait_for_future).
         cb_group = ReentrantCallbackGroup()
 
-        self._move_action = ActionClient(
+        self._move_action = _ActionClientSemCorrida(
             self, MoveGroup, "move_action", callback_group=cb_group
         )
         self._ik_client = self.create_client(

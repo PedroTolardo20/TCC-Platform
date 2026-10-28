@@ -1,8 +1,11 @@
 import json
 import os
+import threading
+import time
 
 import cv2
 import numpy as np
+
 import rclpy
 import message_filters
 
@@ -81,8 +84,14 @@ class RAVVision3D(Node):
         self.declare_parameter("target_frame", "base_link")
         self.declare_parameter("target_class", "")
         self.declare_parameter("visualize", True)
+        # Sem a TF do instante da foto, usar a "mais recente" dá posição
+        # errada se o braço acabou de se mexer (a TF chegou a ficar ~6s
+        # atrasada: braço na cam_pose e a conta ainda com a home). False:
+        # descarta a posição 3D desse frame em vez de chutar.
+        self.declare_parameter("tf_fallback", False)
 
         self.model_path = self.get_parameter("model_path").value
+        self.tf_fallback = bool(self.get_parameter("tf_fallback").value)
         self.imgsz = int(self.get_parameter("imgsz").value)
         self.conf = float(self.get_parameter("conf").value)
         self.device = str(self.get_parameter("device").value)
@@ -160,16 +169,22 @@ class RAVVision3D(Node):
         self.cy = None
 
         # TF: câmera -> base_link.
-        # spin_thread=True: o YOLO na CPU bloqueia o executor por ~2s por
-        # frame; sem thread propria o /tf fica parado nesse tempo, as
-        # mensagens estouram a fila e o buffer fica inconsistente
-        # ("extrapolation into the past/future" em todo lookup).
+        # O listener roda num nó SÓ DELE, com thread própria. Com
+        # TransformListener(self, spin_thread=True) a thread do listener
+        # ganha o nó inteiro -- inclusive a assinatura das imagens -- e
+        # metade das vezes era ela que rodava o YOLO (~1.5 s): o /tf ficava
+        # parado e a TF chegava 1-6 s atrasada (braço já na cam_pose e a
+        # conta ainda com a home).
         self.tf_buffer = Buffer()
+        self._tf_node = rclpy.create_node(f"{self.get_name()}_tf")
         self.tf_listener = TransformListener(
             self.tf_buffer,
-            self,
-            spin_thread=True
+            self._tf_node,
+            spin_thread=True,
         )
+        # Diagnóstico: idade da TF câmera -> target_frame que este nó tem.
+        self._camera_frame = None
+        threading.Thread(target=self._vigiar_tf, daemon=True).start()
 
         # depth=1: com a inferencia mais lenta que a camera, uma fila maior
         # so acumula frames velhos (chegava a ~2.5s de atraso); assim
@@ -270,6 +285,7 @@ class RAVVision3D(Node):
         Executa YOLO no RGB e obtém profundidade correspondente
         no mapa de depth alinhado ao RGB.
         """
+        self._camera_frame = color_msg.header.frame_id
 
         if None in (self.fx, self.fy, self.cx, self.cy):
             self.get_logger().warn(
@@ -492,6 +508,34 @@ class RAVVision3D(Node):
 
         return float(np.median(objeto)), u, v, int(objeto.size)
 
+    def _vigiar_tf(self):
+        """A cada 5 s mede quão velha está a TF câmera -> target_frame no
+        buffer deste nó. Acima de 0.5 s avisa (a posição 3D sai errada ou é
+        descartada); de 30 em 30 s registra mesmo estando ok."""
+        ultimo_info = 0.0
+        while rclpy.ok():
+            time.sleep(5.0)
+            if self._camera_frame is None:
+                continue
+            try:
+                t = self.tf_buffer.lookup_transform(
+                    self.target_frame, self._camera_frame, Time()
+                ).header.stamp
+            except TransformException as exc:
+                self.get_logger().warn(f"vigia TF: sem TF ({exc})")
+                continue
+            if t.sec == 0 and t.nanosec == 0:
+                continue  # só TFs estáticas na cadeia
+            idade = (
+                self.get_clock().now().nanoseconds * 1e-9
+                - (t.sec + t.nanosec * 1e-9)
+            )
+            if idade > 0.5:
+                self.get_logger().warn(f"vigia TF: TF atrasada {idade:.2f}s")
+            elif time.monotonic() - ultimo_info > 30.0:
+                ultimo_info = time.monotonic()
+                self.get_logger().info(f"vigia TF: ok (atraso {idade:.2f}s)")
+
     def transform_to_target_frame(
         self,
         point_camera: PointStamped
@@ -524,6 +568,13 @@ class RAVVision3D(Node):
                     timeout=Duration(seconds=0.20)
                 )
             except TransformException as exc:
+                if not self.tf_fallback:
+                    self.get_logger().warn(
+                        f"TF no timestamp exato da deteccao indisponivel "
+                        f"({exc}); posicao 3D descartada neste frame.",
+                        throttle_duration_sec=2.0,
+                    )
+                    return None
                 self.get_logger().warn(
                     f"TF no timestamp exato da deteccao indisponivel "
                     f"({exc}), usando a mais recente disponivel como "

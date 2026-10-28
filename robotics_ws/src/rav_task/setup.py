@@ -11,6 +11,7 @@ setup(
         ('share/ament_index/resource_index/packages', ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml', 'requirements.txt']),
         ('share/' + package_name + '/launch', glob('launch/*.launch.py')),
+        ('share/' + package_name + '/config', glob('config/*.yaml')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -20,6 +21,7 @@ setup(
         'console_scripts': [
             'start_task = rav_task.start_task:main',
             'teste_alinhamento = rav_task.teste_alinhamento:main',
+            'orquestrador = rav_task.orquestrador:main',
         ],
     },
 )
