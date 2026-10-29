@@ -26,7 +26,7 @@ VISION_NODE = "rav_vision_3d"
 # o ponto de entrega real antes de rodar em produção.
 PLACE_Z_BY_CLASS = {
     "ibuprotrat": 0.05,
-    "maxalgina": 0.04,
+    "pomada": 0.04,
     "aciclovir": 0.03,
 }
 DEFAULT_PLACE_Z = 0.05

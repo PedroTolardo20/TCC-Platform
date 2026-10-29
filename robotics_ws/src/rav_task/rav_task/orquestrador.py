@@ -100,6 +100,8 @@ async def atender(ws, node: Orquestrador, msg: dict):
         node.classe = produto["classe"]
         node.local = produto["local"]
         node.cam_pose = produto.get("cam_pose", "cam_pose")
+        node.garra_fechar = produto.get("garra_fechar", "close_ibu")
+        node.recuar_apos_pick_m = float(produto.get("recuar_apos_pick_m", 0.0))
         with node._lock:
             node._xs.clear()
         log.info(f"[pedido {pedido_id}] {produto.get('nome', node.classe)}")

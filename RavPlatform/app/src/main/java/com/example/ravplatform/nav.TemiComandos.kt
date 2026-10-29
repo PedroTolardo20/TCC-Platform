@@ -41,6 +41,8 @@ class TemiComandos :
     private var inicioAndar: Position? = null
     private var metrosAlvo = 0f
     private var velocidadeAndar = VELOCIDADE_ANDAR_PADRAO
+    /** 1 = frente, -1 = ré. */
+    private var sentidoAndar = 1f
     private var antecipacaoAndar = 0f
     private var porTempo = false
     private var prazoAndar = 0L
@@ -175,7 +177,8 @@ class TemiComandos :
     }
 
     /**
-     * Anda 'metros' para frente (sentido para onde o Temi está virado).
+     * Anda 'metros' para frente (sentido para onde o Temi está virado);
+     * 'metros' negativo = ré (recuar da prateleira com o objeto na garra).
      * A posição do Temi chega atrasada e ele ainda desliza depois do
      * stopMovement, então:
      *  - duracaoS > 0: anda por tempo (distância curta, onde a posição
@@ -195,7 +198,7 @@ class TemiComandos :
         onFim: (Boolean, String) -> Unit
     ) {
         if (!iniciar(onFim)) return
-        if (metros <= 0f) {
+        if (metros == 0f) {
             terminar(true, "distância 0 ignorada")
             return
         }
@@ -205,7 +208,8 @@ class TemiComandos :
             return
         }
         inicioAndar = inicio
-        metrosAlvo = metros
+        metrosAlvo = abs(metros)
+        sentidoAndar = if (metros < 0f) -1f else 1f
         velocidadeAndar = velocidade.coerceIn(0.05f, 1f)
         antecipacaoAndar = antecipacao.coerceAtLeast(0f)
         porTempo = duracaoS > 0f
@@ -228,7 +232,7 @@ class TemiComandos :
             // Prazo explícito: perto de obstáculo o Temi anda bem mais devagar
             // que o normal (freia), e o padrão abaixo desistiria antes.
             timeoutS > 0f -> (timeoutS * 1000).toLong()
-            else -> ((metros / VELOCIDADE_ANDAR_MIN_M_S) * 1000).toLong() + 3000
+            else -> ((metrosAlvo / VELOCIDADE_ANDAR_MIN_M_S) * 1000).toLong() + 3000
         }
         Log.d(TAG, "andar $metros m (vel $velocidadeAndar, antecipação $antecipacaoAndar, " +
             "duração ${duracaoS}s) a partir de (${inicio.x}, ${inicio.y})")
@@ -272,7 +276,8 @@ class TemiComandos :
                 }
                 else -> {
                     // skidJoy só vale por um instante: tem que ser repetido.
-                    robot.skidJoy(velocidadeAndar, correcaoRumo())
+                    // O giro corrige o rumo igual andando de ré.
+                    robot.skidJoy(sentidoAndar * velocidadeAndar, correcaoRumo())
                     handler.postDelayed(this, PERIODO_SKIDJOY_MS)
                 }
             }

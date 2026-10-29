@@ -148,6 +148,12 @@ class RavManipulator(Node):
         # move_to_pose; o objeto de colisão fica no z original.
         self.declare_parameter("pick_z_offset_m", 0.05)
         self.pick_z_offset_m = float(self.get_parameter("pick_z_offset_m").value)
+        # Lidos a cada pick (o orquestrador muda por produto via
+        # set_parameters): pose da garra que fecha no objeto e pose do braço
+        # depois de fechar ("" = fica onde pegou -- prateleira de baixo, onde
+        # a base recua antes de o braço sair).
+        self.declare_parameter("pick_garra_fechar", "close_ibu")
+        self.declare_parameter("pick_pose_final", "cad_reference")
 
         srdf_path = (
             Path(get_package_share_directory("rav_manipulator_moveit_config"))
@@ -423,13 +429,16 @@ class RavManipulator(Node):
         if not ok:
             return False, f"falha ao anexar o objeto na gripper: {msg}"
 
-        ok, msg = self.move_to_named_state("close_ibu")
+        garra = str(self.get_parameter("pick_garra_fechar").value)
+        ok, msg = self.move_to_named_state(garra)
         if not ok:
-            return False, f"falha ao fechar a gripper: {msg}"
-        
-        ok, msg = self.move_to_named_state("cad_reference")
-        if not ok:
-            return False, f"falha ao mover para cad_reference: {msg}"
+            return False, f"falha ao fechar a gripper ({garra}): {msg}"
+
+        pose_final = str(self.get_parameter("pick_pose_final").value)
+        if pose_final:
+            ok, msg = self.move_to_named_state(pose_final)
+            if not ok:
+                return False, f"falha ao mover para {pose_final}: {msg}"
         return True, "ok"
     
 

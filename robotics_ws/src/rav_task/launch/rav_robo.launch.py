@@ -46,12 +46,16 @@ def generate_launch_description():
 
     # depth_registration: profundidade alinhada à RGB. tf_publish_rate=0: TFs
     # internas da câmera em /tf_static (com /tf a 10 Hz a visão perdia a TF
-    # com a CPU cheia).
+    # com a CPU cheia). Nuvem de pontos e IR desligados: ninguém usa (a
+    # visão lê só color + depth) e a nuvem a 30 fps deixava a câmera em ~80%
+    # de um núcleo -- com a CPU cheia o YOLO caía pra ~4 s por frame.
     camera = IncludeLaunchDescription(
         AnyLaunchDescriptionSource(str(astra_share / "launch" / "dabai_dcw.launch.xml")),
         launch_arguments={
             "depth_registration": "true",
             "tf_publish_rate": "0.0",
+            "enable_point_cloud": "false",
+            "enable_ir": "false",
         }.items(),
     )
 

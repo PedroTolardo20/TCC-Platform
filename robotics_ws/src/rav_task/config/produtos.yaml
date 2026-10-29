@@ -6,6 +6,10 @@
 #             (o yaw de cada local é calibrado com modo:=calibrar_yaw)
 #   cam_pose: pose nomeada do braço (SRDF) pra olhar a altura onde o
 #             remédio está -- criar no MoveIt Setup Assistant e trocar aqui
+#   garra_fechar: pose da garra (SRDF) que fecha no remédio (padrão close_ibu)
+#   recuar_apos_pick_m: > 0 = depois de fechar a garra o braço fica no
+#             objeto, a base dá ré isso e só então o braço vai pra ready
+#             (prateleira de baixo). Padrão 0 = pick normal (cad_reference).
 #
 # Mudou um remédio de lugar/altura? Edite este arquivo e reinicie o
 # orquestrador; não precisa recompilar nenhum app.
@@ -16,16 +20,20 @@ produtos:
     classe: ibuprotrat
     local: preprateleira
     cam_pose: cam_pose
+    garra_fechar: close_ibu
   2:
-    nome: Maxalgina 1g
-    classe: maxalgina
+    nome: Pomada
+    classe: pomada
     local: preprateleira
-    cam_pose: cam_pose
+    cam_pose: cam_pose    # prateleira de cima, igual ao Ibuprotrat
+    garra_fechar: close_pom
   3:
-    nome: Aciclovir 200mg
+    nome: Aciclovir
     classe: aciclovir
     local: preprateleira
-    cam_pose: cam_pose
+    cam_pose: cam_pose2   # prateleira de baixo
+    garra_fechar: close_aci
+    recuar_apos_pick_m: 0.20
 
 # Local de entrega (mapa do Temi) e base de carregamento.
 local_place: place

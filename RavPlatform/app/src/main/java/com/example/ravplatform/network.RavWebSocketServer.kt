@@ -145,7 +145,7 @@ class RavWebSocketServer(
 
     // {"tipo":"comando","comando":"ir_para"|"girar"|"girar_para"|"andar"|"pose", ...}
     //  ir_para: "local"; girar: "graus" (relativo); girar_para: "yaw" (rad, absoluto
-    //  no mapa) + opcionais "tolerancia_graus" (1) e "aceitar_graus" (3); andar: "metros" + opcionais "velocidade", "antecipacao_m",
+    //  no mapa) + opcionais "tolerancia_graus" (1) e "aceitar_graus" (3); andar: "metros" (negativo = ré) + opcionais "velocidade", "antecipacao_m",
     //  "duracao_s", "yaw_rumo" (rad), "ganho_rumo", "seguranca" (DEFAULT/MEDIUM/HIGH,
     //  só durante o andar) e "timeout_s"; pose: devolve x, y, yaw; obstaculo: lê/define ("cm")
     //  a distância mínima a obstáculos e mostra a segurança atual.

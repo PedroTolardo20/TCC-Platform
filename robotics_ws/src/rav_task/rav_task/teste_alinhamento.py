@@ -9,7 +9,7 @@ pra erro de ângulo não acumular:
   4. braço -> home; gira até yaw_prateleira ± 90° (absoluto, malha fechada),
      anda |s| mantendo esse rumo, gira até yaw_prateleira
   5. braço -> cam_pose e confere; no máximo 'max_correcoes' correções extras
-  6. alinhado: braço -> home e anda 'avanco_final_m' (15 cm) pra frente,
+  6. alinhado: braço -> home e anda 'avanco_final_m' (20 cm) pra frente,
      mantendo o rumo de frente pra prateleira; depois braço -> cam_pose
   7. pick (/pick_from_vision) -> braço em ready -> base vai até o local
      'place' (com o braço em ready) -> braço na pose 'place' -> abre a
@@ -60,9 +60,10 @@ from rav_manipulator_moveit_config.srv import MoveToNamedState
 
 DETECTIONS_TOPIC = "/rav_vision/detections_3d"
 VISION_NODE = "rav_vision_3d"
+MANIPULATOR_NODE = "rav_manipulator"
 ARQUIVO_CALIBRACAO = os.path.expanduser("~/.ros/rav_alinhamento.json")
 # Poses nomeadas do grupo rav_gripper: não mudam a pose do braço.
-POSES_GARRA = ("open", "closed", "close_ibu")
+POSES_GARRA = ("open", "closed", "close_ibu", "close_pom", "close_aci")
 # Mesmos nomes do manipulator_node.py (objeto anexado pelo pick).
 GRASP_OBJECT_ID = "grasped_object"
 TCP_LINK = "gripper_tcp"
@@ -113,17 +114,27 @@ class TesteAlinhamento(Node):
         # visão (YOLO na CPU) processa com ~2 s de atraso e a TF dela atrasa;
         # com 1.5 s veio uma medição feita com a TF ainda do braço em home.
         self.declare_parameter("cam_pose_settle_s", 2.5)
-        # Faixa plausível do y do objeto (manipulator_world, m). Fora disso a
-        # detecção foi calculada com TF errada/velha e é descartada (em
-        # 2026-10-22 veio y=-0.146 com o objeto a ~-0.77).
-        self.declare_parameter("y_min_objeto", -1.2)
+        # Faixa de y do objeto (manipulator_world, m) aceita SÓ na conferência
+        # antes do pick (depois do avanço, objeto em ~-0.67). No alinhamento
+        # não filtra: antes de avançar o objeto está mais longe (~-0.83, às
+        # vezes além de -1.0) e o filtro impedia de seguir com o robô já
+        # alinhado -- o avanço é que traz o y pra dentro da faixa.
+        self.declare_parameter("y_min_objeto", -1.0)
         self.declare_parameter("y_max_objeto", -0.45)
-        self.declare_parameter("deteccao_timeout_s", 15.0)
+        # Com a CPU cheia a visão chegou a ~3.5 s por frame: 15 s davam só 2
+        # detecções novas e o pick era abortado com o objeto à vista.
+        self.declare_parameter("deteccao_timeout_s", 30.0)
         # Depois do deslocamento principal, quantas correções extras no
         # máximo (a ideia é acertar de primeira; isso é só rede de segurança).
         # (era 1: deslocamentos curtos andam menos que o pedido e a tarefa
         # desistia a ~3 cm do alvo, voltando pra base.)
         self.declare_parameter("max_correcoes", 3)
+        # Medição sem detecção (objeto sumiu da câmera depois de girar/andar):
+        # em vez de desistir e voltar pra base, anda 'reposicionar_m' pra
+        # frente (de frente pra prateleira) só pra mexer a câmera e tenta
+        # ver de novo, até 'reposicionar_tentativas' vezes.
+        self.declare_parameter("reposicionar_m", 0.02)
+        self.declare_parameter("reposicionar_tentativas", 2)
         # Yaw (rad, mapa do Temi) de frente pra prateleira. NaN = lê do
         # ARQUIVO_CALIBRACAO (gravado pelo modo calibrar_yaw).
         self.declare_parameter("yaw_prateleira", float("nan"))
@@ -133,7 +144,7 @@ class TesteAlinhamento(Node):
         self.declare_parameter("aceitar_giro_graus", 3.0)
         # Depois de alinhado, quanto andar pra frente (em direção à
         # prateleira). 0 = não avança.
-        self.declare_parameter("avanco_final_m", 0.15)
+        self.declare_parameter("avanco_final_m", 0.20)
         # Segurança de navegação só durante o avanço: em HIGH (o padrão do
         # robô) o Temi se recusa a andar em direção à prateleira. Volta ao
         # nível original assim que ele para. Vazio = não mexe.
@@ -146,6 +157,13 @@ class TesteAlinhamento(Node):
         # Quanto antes do alvo parar (o Temi ainda desliza um pouco).
         self.declare_parameter("avanco_antecipacao_m", 0.01)
         self.declare_parameter("avanco_timeout_s", 40.0)
+        # Pose da garra que fecha no objeto (por produto no produtos.yaml).
+        self.declare_parameter("garra_fechar", "close_ibu")
+        # > 0: depois de fechar a garra o braço fica onde pegou, a base
+        # recua isso (ré, mesma velocidade/segurança do avanço) e só então
+        # o braço vai pra ready -- prateleira de baixo, onde ir direto pra
+        # cad_reference bateria na prateleira de cima. 0 = pick normal.
+        self.declare_parameter("recuar_apos_pick_m", 0.0)
         # Depois de alinhado: pick + levar até o local de entrega + voltar
         # pra base. False = para no alinhamento (só teste).
         self.declare_parameter("fazer_pick_place", True)
@@ -201,6 +219,8 @@ class TesteAlinhamento(Node):
         self.deteccao_timeout_s = float(p("deteccao_timeout_s"))
         self.modo = str(p("modo"))
         self.max_correcoes = int(p("max_correcoes"))
+        self.reposicionar_m = float(p("reposicionar_m"))
+        self.reposicionar_tentativas = int(p("reposicionar_tentativas"))
         self.yaw_prateleira = float(p("yaw_prateleira"))
         self.tolerancia_yaw = math.radians(float(p("tolerancia_yaw_graus")))
         self.base_braco_offset_m = float(p("base_braco_offset_m"))
@@ -212,6 +232,8 @@ class TesteAlinhamento(Node):
         self.avanco_velocidade = float(p("avanco_velocidade"))
         self.avanco_antecipacao_m = float(p("avanco_antecipacao_m"))
         self.avanco_timeout_s = float(p("avanco_timeout_s"))
+        self.garra_fechar = str(p("garra_fechar"))
+        self.recuar_apos_pick_m = float(p("recuar_apos_pick_m"))
         self.fazer_pick_place = bool(p("fazer_pick_place"))
         self.local_place = str(p("local_place"))
         self.local_base = str(p("local_base"))
@@ -241,6 +263,10 @@ class TesteAlinhamento(Node):
         self._vision_param_client = self.create_client(
             SetParameters, f"/{VISION_NODE}/set_parameters", callback_group=cb_group
         )
+        self._manip_param_client = self.create_client(
+            SetParameters, f"/{MANIPULATOR_NODE}/set_parameters",
+            callback_group=cb_group,
+        )
 
         # Lista de (stamp_s, x, y) da classe pedida, já em manipulator_world.
         self._lock = threading.Lock()
@@ -260,24 +286,36 @@ class TesteAlinhamento(Node):
             pos = det.get("position_target_m")
             if det["class_name"] != self.classe or pos is None:
                 continue
-            if not self.y_min_objeto <= pos["y"] <= self.y_max_objeto:
-                self.get_logger().warn(
-                    f"detecção descartada: y={pos['y']:+.3f} fora de "
-                    f"[{self.y_min_objeto}, {self.y_max_objeto}] (TF velha?)"
-                )
-                continue
             with self._lock:
                 self._xs.append((stamp, pos["x"], pos["y"]))
 
-    def ler_objeto(self):
-        """Mediana de (x, y) de 'amostras' detecções tiradas a partir de agora."""
+    def ler_objeto(self, amostras: int = 0, filtrar_y: bool = False):
+        """Mediana de (x, y) de 'amostras' detecções tiradas a partir de agora
+        (0 = o parâmetro 'amostras'). filtrar_y: só aceita y dentro de
+        [y_min_objeto, y_max_objeto] (conferência antes do pick)."""
+        amostras = amostras or self.amostras
         inicio = self.get_clock().now().nanoseconds / 1e9
         prazo = time.monotonic() + self.deteccao_timeout_s
+        avisados = set()
         while time.monotonic() < prazo:
             with self._lock:
-                novos = [(x, y) for stamp, x, y in self._xs if stamp >= inicio]
-            if len(novos) >= self.amostras:
-                novos = novos[: self.amostras]
+                novos = [(stamp, x, y) for stamp, x, y in self._xs if stamp >= inicio]
+            if filtrar_y:
+                for stamp, _, y in novos:
+                    fora = not self.y_min_objeto <= y <= self.y_max_objeto
+                    if fora and stamp not in avisados:
+                        avisados.add(stamp)
+                        self.get_logger().warn(
+                            f"detecção ignorada pro pick: y={y:+.3f} fora de "
+                            f"[{self.y_min_objeto}, {self.y_max_objeto}]"
+                        )
+                novos = [
+                    (stamp, x, y) for stamp, x, y in novos
+                    if self.y_min_objeto <= y <= self.y_max_objeto
+                ]
+            novos = [(x, y) for _, x, y in novos]
+            if len(novos) >= amostras:
+                novos = novos[:amostras]
                 return (
                     statistics.median(x for x, _ in novos),
                     statistics.median(y for _, y in novos),
@@ -357,15 +395,38 @@ class TesteAlinhamento(Node):
     def pick(self):
         """Pick pela visão (vision_pick_bridge -> /pick do manipulator_node).
 
-        O pick termina com o braço em cad_reference (ver manipulator_node).
+        Fecha a garra com 'garra_fechar'. Termina em cad_reference ou, com
+        recuar_apos_pick_m > 0, parado onde pegou (braco_estado "pick").
         """
+        fica_no_objeto = self.recuar_apos_pick_m > 0
+        pose_final = "" if fica_no_objeto else "cad_reference"
+        # Tem que valer: com o parâmetro velho o braço iria pra
+        # cad_reference de dentro da prateleira de baixo.
+        pedido = SetParameters.Request(parameters=[
+            Parameter(name="pick_garra_fechar", value=ParameterValue(
+                type=ParameterType.PARAMETER_STRING,
+                string_value=self.garra_fechar)),
+            Parameter(name="pick_pose_final", value=ParameterValue(
+                type=ParameterType.PARAMETER_STRING, string_value=pose_final)),
+        ])
+        resultado = self._chamar(
+            self._manip_param_client, pedido, 5.0,
+            f"{MANIPULATOR_NODE}/set_parameters",
+        )
+        if not all(r.successful for r in resultado.results):
+            raise RuntimeError("manipulator_node recusou os parâmetros do pick")
+        self.get_logger().info(
+            f"pick: garra '{self.garra_fechar}', depois "
+            f"{'fica no objeto' if fica_no_objeto else pose_final}"
+        )
+
         self.braco_estado = None
         resultado = self._chamar(
             self._pick_client, Trigger.Request(), 90.0, "pick_from_vision"
         )
         if not resultado.success:
             raise RuntimeError(f"pick falhou: {resultado.message}")
-        self.braco_estado = "cad_reference"
+        self.braco_estado = "pick" if fica_no_objeto else "cad_reference"
         self.get_logger().info(f"pick ok: {resultado.message}")
 
     def filtrar_visao(self, classe: str):
@@ -520,10 +581,29 @@ async def _executar_tarefa(ws, node, status, yaw_s, em_thread, log):
         await em_thread(node.mover_braco, node.cam_pose)
         await asyncio.sleep(node.cam_pose_settle_s)
         objeto = await em_thread(node.ler_objeto)
+        tentativa = 0
+        while objeto is None and tentativa < node.reposicionar_tentativas:
+            # Não viu o objeto: mexe a câmera (2 cm pra frente) e olha de novo.
+            tentativa += 1
+            log.warn(
+                f"não vi '{node.classe}': andando {node.reposicionar_m:.3f} m "
+                f"pra frente e tentando de novo "
+                f"({tentativa}/{node.reposicionar_tentativas})"
+            )
+            await em_thread(node.mover_braco, "home")
+            await comando_temi(
+                ws, node, "andar", **node.plano_andar(node.reposicionar_m),
+                yaw_rumo=yaw_s, ganho_rumo=node.ganho_rumo,
+                seguranca=node.avanco_seguranca,
+            )
+            await em_thread(node.mover_braco, node.cam_pose)
+            await asyncio.sleep(node.cam_pose_settle_s)
+            objeto = await em_thread(node.ler_objeto)
         if objeto is None:
             raise RuntimeError(
                 f"nenhuma detecção de '{node.classe}' com TF em "
-                f"{node.deteccao_timeout_s}s"
+                f"{node.deteccao_timeout_s}s (mesmo depois de {tentativa} "
+                f"reposicionamento(s))"
             )
         x, y = objeto
         yaw = await ler_yaw(ws, node)
@@ -643,10 +723,30 @@ async def _executar_tarefa(ws, node, status, yaw_s, em_thread, log):
     # Garante detecção nova (pós-avanço) antes do pick: a ponte só aceita
     # detecções de até 5 s.
     await asyncio.sleep(node.cam_pose_settle_s)
-    if await em_thread(node.ler_objeto) is None:
-        raise RuntimeError(f"sem detecção de '{node.classe}' pra fazer o pick")
+    # Só confirma que há detecção nova (a ponte usa a mais recente); não
+    # precisa da mediana de 3 como na medição do alinhamento.
+    if await em_thread(node.ler_objeto, 1, True) is None:
+        raise RuntimeError(
+            f"sem detecção de '{node.classe}' pra fazer o pick com y em "
+            f"[{node.y_min_objeto}, {node.y_max_objeto}]"
+        )
     log.info("fazendo o pick")
     await em_thread(node.pick)
+
+    if node.recuar_apos_pick_m > 0:
+        # Prateleira de baixo: base recua com o braço ainda no objeto (de
+        # frente pra prateleira, rumo yaw_s) antes de o braço sair dela.
+        log.info(f"recuando {node.recuar_apos_pick_m:.3f} m com o objeto na garra")
+        await comando_temi(
+            ws, node, "andar",
+            metros=-round(node.recuar_apos_pick_m, 3),
+            velocidade=node.avanco_velocidade,
+            antecipacao_m=node.avanco_antecipacao_m,
+            timeout_s=node.avanco_timeout_s,
+            yaw_rumo=yaw_s, ganho_rumo=node.ganho_rumo,
+            seguranca=node.avanco_seguranca,
+            braco_ok=("pick",),
+        )
 
     # ---------------- levar até o place ----------------
     await em_thread(node.mover_braco, "ready")

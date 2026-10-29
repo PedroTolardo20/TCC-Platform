@@ -50,8 +50,22 @@
         <joint name="shoulder_joint" value="0.1128"/>
         <joint name="wrist_joint" value="-0.6682"/>
     </group_state>
+    <group_state name="cam_pose2" group="rav_arm">
+        <joint name="elbow_joint" value="0.2009"/>
+        <joint name="shoulder_joint" value="1.3959"/>
+        <joint name="wrist_joint" value="-1.56005"/>
+    </group_state>
     <group_state name="close_ibu" group="rav_gripper">
-        <joint name="gripper_pinion_joint" value="0.6"/>
+        <joint name="gripper_pinion_joint" value="0.58"/>
+    </group_state>
+    <group_state name="close_aci" group="rav_gripper">
+        <joint name="gripper_pinion_joint" value="0.59"/>
+    </group_state>
+    <group_state name="close_pom" group="rav_gripper">
+        <joint name="gripper_pinion_joint" value="0.60"/>
+    </group_state>
+    <group_state name="close_max" group="rav_gripper">
+        <joint name="gripper_pinion_joint" value="0.605"/>
     </group_state>
     <!--END EFFECTOR: Purpose: Represent information about an end effector.-->
     <end_effector name="rav_gripper" parent_link="wrist_link" group="rav_gripper" parent_group="rav_arm"/>

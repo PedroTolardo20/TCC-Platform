@@ -17,6 +17,6 @@ fun formatarPreco(centavos: Int): String =
 
 val mockProducts = listOf(
     Product(1, "Ibuprotrat 400mg, 20 comprimidos", 1390, R.drawable.ibuprotrat),
-    Product(2, "Maxalgina 1g, 10 comprimidos", 990, R.drawable.maxalgina),
-    Product(3, "Aciclovir 200mg, 25 comprimidos", 1790, R.drawable.aciclovir)
+    Product(2, "Pomada", 1290, R.drawable.pomada),
+    Product(3, "Aciclovir", 1590, R.drawable.aciclovir)
 )

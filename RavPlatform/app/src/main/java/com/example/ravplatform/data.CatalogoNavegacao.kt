@@ -10,7 +10,7 @@ data class LocalProduto(
 // IMPORTANTE: os ids DEVEM ser os mesmos do app do totem.
 val catalogoNavegacao = mapOf(
     1 to LocalProduto("prateleira1", "ibuprotrat"),
-    2 to LocalProduto("prateleira2", "maxalgina"),
+    2 to LocalProduto("prateleira2", "pomada"),
     3 to LocalProduto("prateleira3", "aciclovir")
 )
 

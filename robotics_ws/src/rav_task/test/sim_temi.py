@@ -11,6 +11,7 @@ e, em outro:
   ros2 run rav_task orquestrador --ros-args \\
     -r move_to_named_state:=/sim_move -r pick_from_vision:=/sim_pick \\
     -r apply_planning_scene:=/sim_scene -r /rav_vision/detections_3d:=/sim_det \\
+    -r /rav_manipulator/set_parameters:=/sim_manip_params \\
     -p temi_url:=ws://127.0.0.1:8797 -p yaw_prateleira:=0.7 -p cam_pose_settle_s:=0.3
 (--produto 0 = não manda tarefa; serve pro teste_alinhamento.)
 """
@@ -20,11 +21,14 @@ import asyncio
 import json
 import math
 import random
+import signal
 import threading
 import time
 
 import rclpy
 from moveit_msgs.srv import ApplyPlanningScene
+from rcl_interfaces.msg import SetParametersResult
+from rcl_interfaces.srv import SetParameters
 from rclpy.node import Node
 from std_msgs.msg import String
 from std_srvs.srv import Trigger
@@ -33,7 +37,7 @@ import websockets
 
 from rav_manipulator_moveit_config.srv import MoveToNamedState
 
-POSES_GARRA = ("open", "closed", "close_ibu")
+POSES_GARRA = ("open", "closed", "close_ibu", "close_pom", "close_aci")
 YAW_PRATELEIRA = 0.7
 
 
@@ -46,6 +50,9 @@ def main():
     ap.add_argument("--classe", default="ibuprotrat")
     ap.add_argument("--deteccao-ruim", action="store_true",
                     help="primeiras detecções com y absurdo (TF velha)")
+    ap.add_argument("--sumir", action="store_true",
+                    help="objeto some da câmera depois do 1º deslocamento e "
+                         "volta no próximo andar (testa o reposicionamento)")
     ap.add_argument("--porta", type=int, default=8797)
     args = ap.parse_args()
 
@@ -53,7 +60,8 @@ def main():
     rob = {"x": 2.0, "y": 1.0, "yaw": YAW_PRATELEIRA + math.radians(args.erro_chegada)}
     c, s = math.cos(YAW_PRATELEIRA), math.sin(YAW_PRATELEIRA)
     obj = (rob["x"] + 0.85 * c - 0.12 * s, rob["y"] + 0.85 * s + 0.12 * c)
-    estado = {"braco": "home", "ruins": 6 if args.deteccao_ruim else 0}
+    estado = {"braco": "home", "ruins": 6 if args.deteccao_ruim else 0,
+              "oculto": False, "sumir": args.sumir}
 
     rclpy.init()
     n = Node("sim_temi")
@@ -79,6 +87,14 @@ def main():
     n.create_service(MoveToNamedState, "/sim_move", mover)
     n.create_service(Trigger, "/sim_pick", pick)
     n.create_service(ApplyPlanningScene, "/sim_scene", cena)
+
+    def params_braco(req, res):
+        print("  [braço] parâmetros: " + ", ".join(
+            f"{p.name}={p.value.string_value!r}" for p in req.parameters), flush=True)
+        res.results = [SetParametersResult(successful=True) for _ in req.parameters]
+        return res
+
+    n.create_service(SetParameters, "/sim_manip_params", params_braco)
     pub = n.create_publisher(String, "/sim_det", 10)
 
     def publicar():
@@ -88,7 +104,7 @@ def main():
             frente = cy * dx + sy * dy
             esquerda = -sy * dx + cy * dy
             dets = []
-            if estado["braco"].startswith("cam_pose"):
+            if estado["braco"].startswith("cam_pose") and not estado["oculto"]:
                 y = -(frente - 0.05)
                 if estado["ruins"] > 0:
                     estado["ruins"] -= 1
@@ -131,11 +147,15 @@ def main():
                 rob["yaw"] = nz(m["yaw"] + math.radians(random.uniform(-0.8, 0.8)))
             elif cmd == "andar":
                 d = m["metros"] * args.fator_andar
+                if estado["oculto"]:
+                    estado["oculto"] = False
+                elif estado["sumir"] and abs(m["metros"]) > 0.05:
+                    estado["oculto"], estado["sumir"] = True, False
                 rob["x"] += d * math.cos(rob["yaw"])
                 rob["y"] += d * math.sin(rob["yaw"])
             elif cmd == "obstaculo":
                 extra = {"antes": 10, "depois": 10}
-            print(f"  [temi] {cmd} (braço={estado['braco']})", flush=True)
+            print(f"  [temi] {cmd} {m.get('metros', '')} (braço={estado['braco']})", flush=True)
             await ws.send(json.dumps({"tipo": "comando_concluido", "comando": cmd,
                                       "success": True, "mensagem": "ok", **extra}))
 
@@ -143,6 +163,9 @@ def main():
         async with websockets.serve(conexao, "127.0.0.1", args.porta):
             await asyncio.Future()
 
+    # SIGTERM (timeout, kill) encerra como Ctrl+C -- senão o simulador
+    # ficava vivo depois dos testes, gastando CPU.
+    signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(KeyboardInterrupt()))
     try:
         asyncio.run(servidor())
     except KeyboardInterrupt:
